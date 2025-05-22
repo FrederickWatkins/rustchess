@@ -1,4 +1,4 @@
-use std::{ops::Add};
+use std::{fmt::Display, ops::Add};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 struct Position(i64, i64);
@@ -29,12 +29,12 @@ impl Colour {
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 enum PieceKind {
-    Pawn { en_passant: bool },
+    Pawn { moved: bool },
     Knight,
     Bishop,
-    Rook,
+    Rook { moved: bool },
     Queen,
-    King { castled: bool },
+    King { moved: bool },
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -55,11 +55,14 @@ impl Piece {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-struct Game {
+struct Board {
     pieces: Vec<Piece>,
+    turn: Colour,
+    // The square that the en-passanting pawn can move to as used in FEN
+    en_passant: Option<Position>,
 }
 
-impl Game {
+impl Board {
     fn get_all_pieces(&self) -> Vec<&Piece> {
         self.pieces.iter().collect()
     }
@@ -82,7 +85,7 @@ impl Game {
                 PieceKind::Pawn { .. } => Ok(self.pawn_moves(piece)),
                 PieceKind::Knight => Ok(self.knight_moves(piece)),
                 PieceKind::Bishop => Ok(self.bishop_moves(piece)),
-                PieceKind::Rook => Ok(self.rook_moves(piece)),
+                PieceKind::Rook { .. } => Ok(self.rook_moves(piece)),
                 PieceKind::Queen => Ok(self.queen_moves(piece)),
                 PieceKind::King { .. } => Ok(self.king_moves(piece)),
             }
@@ -128,6 +131,29 @@ impl Game {
 
     fn king_moves(&self, piece: &Piece) -> Vec<Position> {
         todo!()
+    }
+
+    fn fmt_board(&self) -> String {
+        let templ = "Xx Xx Xx Xx Xx Xx Xx Xx\n";
+        let mut outstr = String::from(templ).repeat(8);
+        for piece in &self.pieces {
+            let index = (7-piece.pos.1 as usize) * templ.len() + piece.pos.0 as usize * 3;
+            outstr.replace_range(index..index+2, match piece.kind{
+                PieceKind::Pawn { .. } => "P ",
+                PieceKind::Knight => "Kn",
+                PieceKind::Bishop => "B ",
+                PieceKind::Rook { .. } => "R ",
+                PieceKind::Queen => "Q ",
+                PieceKind::King { .. } => "K ",
+            });
+        }
+        outstr
+    }
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.fmt_board())
     }
 }
 
