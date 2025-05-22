@@ -1,3 +1,4 @@
+use phf::{phf_map, Map};
 use std::{fmt::Display, ops::Add};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -27,8 +28,45 @@ impl Colour {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+static PIECE_LETTERS: Map<&'static str, PieceKind> = phf_map! {
+    "P" => PieceKind::Pawn,
+    "Kn" => PieceKind::Knight,
+    "B" => PieceKind::Bishop,
+    "R" => PieceKind::Rook,
+    "Q" => PieceKind::Queen,
+    "K" => PieceKind::King,
+};
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 enum PieceKind {
+    Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
+}
+
+impl TryFrom<&str> for PieceKind {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if let Some(x) = PIECE_LETTERS.get(value) {
+            Ok(*x)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl From<PieceKind> for &str {
+    fn from(val: PieceKind) -> Self {
+        PIECE_LETTERS.entries().find(|(_key, value)| value == &&val).unwrap().0
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum PieceBehaviour {
     Pawn { moved: bool },
     Knight,
     Bishop,
@@ -41,17 +79,23 @@ enum PieceKind {
 struct Piece {
     pos: Position,
     colour: Colour,
-    kind: PieceKind,
+    behaviour: PieceBehaviour,
 }
 
 impl Piece {
-    fn new(pos: Position, colour: Colour, kind: PieceKind) -> Self {
-        Piece { pos, colour, kind }
+    fn new(pos: Position, colour: Colour, behaviour: PieceBehaviour) -> Self {
+        Piece { pos, colour, behaviour }
     }
 
     fn direction(&self) -> Position {
         self.colour.direction()
     }
+}
+
+struct Move {
+    end: Position,
+    start: Option<Position>,
+    kind: Option<PieceKind>,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -79,15 +123,19 @@ impl Board {
         Ok(self.get_piece_moves(start)?.contains(&end))
     }
 
+    fn get_all_moves(&self) -> Vec<(Position, Position)> {
+        todo!()
+    }
+
     fn get_piece_moves(&self, pos: Position) -> Result<Vec<Position>, ()> {
         if let Some(piece) = self.get_piece(pos) {
-            match piece.kind {
-                PieceKind::Pawn { .. } => Ok(self.pawn_moves(piece)),
-                PieceKind::Knight => Ok(self.knight_moves(piece)),
-                PieceKind::Bishop => Ok(self.bishop_moves(piece)),
-                PieceKind::Rook { .. } => Ok(self.rook_moves(piece)),
-                PieceKind::Queen => Ok(self.queen_moves(piece)),
-                PieceKind::King { .. } => Ok(self.king_moves(piece)),
+            match piece.behaviour {
+                PieceBehaviour::Pawn { .. } => Ok(self.pawn_moves(piece)),
+                PieceBehaviour::Knight => Ok(self.knight_moves(piece)),
+                PieceBehaviour::Bishop => Ok(self.bishop_moves(piece)),
+                PieceBehaviour::Rook { .. } => Ok(self.rook_moves(piece)),
+                PieceBehaviour::Queen => Ok(self.queen_moves(piece)),
+                PieceBehaviour::King { .. } => Ok(self.king_moves(piece)),
             }
         } else {
             Err(())
@@ -137,15 +185,18 @@ impl Board {
         let templ = "Xx Xx Xx Xx Xx Xx Xx Xx\n";
         let mut outstr = String::from(templ).repeat(8);
         for piece in &self.pieces {
-            let index = (7-piece.pos.1 as usize) * templ.len() + piece.pos.0 as usize * 3;
-            outstr.replace_range(index..index+2, match piece.kind{
-                PieceKind::Pawn { .. } => "P ",
-                PieceKind::Knight => "Kn",
-                PieceKind::Bishop => "B ",
-                PieceKind::Rook { .. } => "R ",
-                PieceKind::Queen => "Q ",
-                PieceKind::King { .. } => "K ",
-            });
+            let index = (7 - piece.pos.1 as usize) * templ.len() + piece.pos.0 as usize * 3;
+            outstr.replace_range(
+                index..index + 2,
+                match piece.behaviour {
+                    PieceBehaviour::Pawn { .. } => "P ",
+                    PieceBehaviour::Knight => "Kn",
+                    PieceBehaviour::Bishop => "B ",
+                    PieceBehaviour::Rook { .. } => "R ",
+                    PieceBehaviour::Queen => "Q ",
+                    PieceBehaviour::King { .. } => "K ",
+                },
+            );
         }
         outstr
     }
@@ -167,5 +218,53 @@ mod tests {
         let pos2 = Position(4, 3);
         let result = pos1 + pos2;
         assert_eq!(result, Position(7, 8))
+    }
+
+    #[test]
+    fn test_piece_letters() {
+        assert_eq!(PIECE_LETTERS.get("K").unwrap(), &PieceKind::King);
+        assert_eq!(PIECE_LETTERS.get("Kn").unwrap(), &PieceKind::Knight);
+        assert_eq!(PIECE_LETTERS.get("R").unwrap(), &PieceKind::Rook);
+
+        assert_eq!(
+            PIECE_LETTERS
+                .entries()
+                .find(|(_key, value)| value == &&PieceKind::Pawn)
+                .unwrap()
+                .0,
+            &"P"
+        );
+        assert_eq!(
+            PIECE_LETTERS
+                .entries()
+                .find(|(_key, value)| value == &&PieceKind::Queen)
+                .unwrap()
+                .0,
+            &"Q"
+        );
+        assert_eq!(
+            PIECE_LETTERS
+                .entries()
+                .find(|(_key, value)| value == &&PieceKind::Bishop)
+                .unwrap()
+                .0,
+            &"B"
+        );
+    }
+    
+    #[test]
+    fn test_from_piecekind() {
+        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Pawn), "P");
+        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::King), "K");
+        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Queen), "Q");
+    }
+    
+    #[test]
+    fn test_from_str() {
+        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("Kn").unwrap(), PieceKind::Knight);
+        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("R").unwrap(), PieceKind::Rook);
+        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("B").unwrap(), PieceKind::Bishop);
+        
+        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("G"), Err(()))
     }
 }
