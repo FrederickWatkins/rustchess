@@ -1,7 +1,6 @@
-[package]
-name = "chess"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-phf = {version = "0.11.3", features = ["macros"]}
+[workspace]
+resolver="3"
+members=["chess_cli", "chess_lib"]
+[workspace.dependencies]
+chess_lib = {path = "chess_lib"}
+chess_cli = {path = "chess_cli"}
