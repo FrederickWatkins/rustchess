@@ -217,37 +217,29 @@ impl Board {
 
     fn king_moves(&self, piece: &Piece) -> Vec<Position> {
         let mut out: Vec<Position> = vec![];
-        let mut test_board = self.clone();
         for i in -1..=1 {
             for j in -1..=1 {
-                let pos = Position(i, j);
+                let pos = piece.pos + Position(i, j);
+                if self.king_move_safe(piece, pos) {out.push(pos)}
             }
-        }
-        todo!()
-    }
-
-    fn king_move_safe(&self, piece: &Piece, end: Position, test_board: &mut Board) -> bool {
-        let mut out = false;
-        if let Some(other_piece) = self.get_piece(end) {
-            if other_piece.colour != piece.colour {
-                test_board.move_piece_unchecked(piece.pos, end);
-                if test_board.check_square_safe(end) {
-                    out = true;
-                }
-                test_board.move_piece_unchecked(end, piece.pos);
-            }
-        } else {
-            test_board.move_piece_unchecked(piece.pos, end);
-            if test_board.check_square_safe(end) {
-                out = true;
-            }
-            test_board.move_piece_unchecked(end, piece.pos)
         }
         out
     }
 
+    fn king_move_safe(&self, piece: &Piece, end: Position) -> bool {
+        let mut test_board = self.clone();
+        test_board.move_piece_unchecked(piece.pos, end);
+        (if let Some(other_piece) = self.get_piece(end) {
+            // Piece in way, check whether takeable and safe
+            other_piece.colour != piece.colour
+        } else {
+            // Square empty, just check safe
+            true
+        } && test_board.check_square_safe(end))
+    }
+
     fn check_square_safe(&self, square: Position) -> bool {
-        self.get_all_moves().iter().any(|pos| pos.end == square)
+        !self.get_all_moves().iter().any(|pos| pos.end == square)
     }
 
     fn check_square_takeable(&self, piece: &Piece, square: Position) -> bool {
@@ -475,6 +467,32 @@ mod tests {
 
     #[test]
     fn test_king_moves() {
-        todo!()
+        let ourking = Piece::new(Position(4, 3), Colour::White, PieceKind::King);
+        let coveringrook = Piece::new(Position(3, 6), Colour::Black, PieceKind::Rook);
+        let coveringqueen = Piece::new(Position(5, 7), Colour::Black, PieceKind::Queen);
+        let capturepawn = Piece::new(Position(4, 4), Colour::Black, PieceKind::Pawn);
+        let blockingpiece2 = Piece::new(Position(4, 2), Colour::White, PieceKind::Queen);
+        let blockingpiece3 = Piece::new(Position(5, 3), Colour::Black, PieceKind::Knight);
+        let board = Board {
+            pieces: vec![
+                ourking,
+                coveringrook,
+                coveringqueen,
+                capturepawn,
+                blockingpiece2,
+                blockingpiece3,
+            ],
+            turn: Colour::White,
+            en_passant: None,
+            castling_rights: [CastlingRights {queen_side: false, king_side: false}, CastlingRights {queen_side: false, king_side: false}],
+        };
+        let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
+        let mut expectation = vec![
+            Position(4, 4),
+            Position(5, 2)
+        ];
+        moves.sort();
+        expectation.sort();
+        assert_eq!(moves, expectation);
     }
 }
