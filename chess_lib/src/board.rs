@@ -1,93 +1,7 @@
-use phf::{phf_map, Map};
-use std::{
-    fmt::Display,
-    ops::{Add, AddAssign, Not},
-};
+use std::fmt::Display;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-struct Position(i64, i64);
-
-impl Add for Position {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Position(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-
-impl AddAssign for Position {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = rhs + *self;
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-enum Colour {
-    White,
-    Black,
-}
-
-impl Not for Colour {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Colour::White => Colour::Black,
-            Colour::Black => Colour::White,
-        }
-    }
-}
-
-impl Colour {
-    pub fn direction(self, direction: Position) -> Position {
-        if self == Colour::Black {
-            Position(direction.0, -direction.1)
-        } else {
-            Position(direction.0, direction.1)
-        }
-    }
-}
-
-static PIECE_LETTERS: Map<&'static str, PieceKind> = phf_map! {
-    "P" => PieceKind::Pawn,
-    "Kn" => PieceKind::Knight,
-    "B" => PieceKind::Bishop,
-    "R" => PieceKind::Rook,
-    "Q" => PieceKind::Queen,
-    "K" => PieceKind::King,
-};
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
-enum PieceKind {
-    Pawn,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King,
-}
-
-impl TryFrom<&str> for PieceKind {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(x) = PIECE_LETTERS.get(value) {
-            Ok(*x)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<PieceKind> for &str {
-    fn from(val: PieceKind) -> Self {
-        PIECE_LETTERS
-            .entries()
-            .find(|(_key, value)| value == &&val)
-            .unwrap()
-            .0
-    }
-}
+use crate::chess_move::*;
+use crate::piece::*;
 
 type Directions = [Position; 8];
 
@@ -125,23 +39,6 @@ const QUEEN_DIRECTIONS: Directions = [
 ];
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-struct Piece {
-    pos: Position,
-    colour: Colour,
-    kind: PieceKind,
-}
-
-impl Piece {
-    fn new(pos: Position, colour: Colour, kind: PieceKind) -> Self {
-        Piece { pos, colour, kind }
-    }
-
-    fn direction(&self, direction: Position) -> Position {
-        self.colour.direction(direction)
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 struct CastlingRights {
     queen_side: bool,
     king_side: bool,
@@ -156,25 +53,8 @@ impl CastlingRights {
     }
 }
 
-struct AmbiguousMove {
-    end: Position,
-    start: (Option<i64>, Option<i64>),
-    kind: PieceKind,
-}
-
-struct UnambiguousMove {
-    end: Position,
-    start: Position,
-}
-
-impl UnambiguousMove {
-    fn new(start: Position, end: Position) -> Self {
-        Self { start, end }
-    }
-}
-
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-struct Board {
+pub struct Board {
     pieces: Vec<Piece>,
     turn: Colour,
     // The square that the en-passanting pawn can move to as used in FEN
@@ -252,10 +132,15 @@ impl Board {
     fn pawn_moves(&self, piece: &Piece) -> Vec<Position> {
         let mut out: Vec<Position> = vec![];
         // First square empty
-        if self.get_piece(piece.pos + piece.direction(Position(0, 1))).is_none() {
+        if self
+            .get_piece(piece.pos + piece.direction(Position(0, 1)))
+            .is_none()
+        {
             out.push(piece.pos + piece.direction(Position(0, 1)));
             // Piece on starting row and second square empty
-            if self.get_piece(piece.pos + piece.direction(Position(0, 2))).is_none()
+            if self
+                .get_piece(piece.pos + piece.direction(Position(0, 2)))
+                .is_none()
                 && piece.pos.1
                     == match piece.colour {
                         Colour::White => 1,
@@ -405,255 +290,191 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_add() {
-        let pos1 = Position(3, 5);
-        let pos2 = Position(4, 3);
-        let result = pos1 + pos2;
-        assert_eq!(result, Position(7, 8))
+    fn test_first_white_pawn_moves() {
+        let ourpawn = Piece::new(Position(3, 1), Colour::White, PieceKind::Pawn);
+        let capturepawn = Piece::new(Position(2, 2), Colour::Black, PieceKind::Pawn);
+        let blockingpiece = Piece::new(Position(3, 3), Colour::White, PieceKind::Knight);
+        let mut board = Board {
+            pieces: vec![ourpawn, capturepawn],
+            turn: Colour::White,
+            en_passant: None,
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(3, 1)).unwrap();
+        assert_eq!(moves.len(), 3);
+        assert!(moves.contains(&Position(3, 2)));
+        assert!(moves.contains(&Position(3, 3)));
+        assert!(moves.contains(&Position(2, 2)));
+        board.pieces.push(blockingpiece);
+        board.get_piece_mut(Position(2, 2)).unwrap().pos = Position(4, 2);
+        moves = board.get_piece_moves(Position(3, 1)).unwrap();
+        assert_eq!(moves.len(), 2);
+        assert!(moves.contains(&Position(3, 2)));
+        assert!(moves.contains(&Position(4, 2)));
+        board.get_piece_mut(Position(3, 3)).unwrap().pos = Position(3, 2);
+        moves = board.get_piece_moves(Position(3, 1)).unwrap();
+        assert_eq!(moves.len(), 1);
+        assert!(moves.contains(&Position(4, 2)));
     }
 
     #[test]
-    fn test_piece_letters() {
-        assert_eq!(PIECE_LETTERS.get("K").unwrap(), &PieceKind::King);
-        assert_eq!(PIECE_LETTERS.get("Kn").unwrap(), &PieceKind::Knight);
-        assert_eq!(PIECE_LETTERS.get("R").unwrap(), &PieceKind::Rook);
-
-        assert_eq!(
-            PIECE_LETTERS
-                .entries()
-                .find(|(_key, value)| value == &&PieceKind::Pawn)
-                .unwrap()
-                .0,
-            &"P"
-        );
-        assert_eq!(
-            PIECE_LETTERS
-                .entries()
-                .find(|(_key, value)| value == &&PieceKind::Queen)
-                .unwrap()
-                .0,
-            &"Q"
-        );
-        assert_eq!(
-            PIECE_LETTERS
-                .entries()
-                .find(|(_key, value)| value == &&PieceKind::Bishop)
-                .unwrap()
-                .0,
-            &"B"
-        );
+    fn test_black_pawn_moves() {
+        let ourpawn = Piece::new(Position(3, 3), Colour::Black, PieceKind::Pawn);
+        let capturepawn = Piece::new(Position(2, 2), Colour::White, PieceKind::Pawn);
+        let blockingpiece = Piece::new(Position(3, 2), Colour::White, PieceKind::Knight);
+        let mut board = Board {
+            pieces: vec![ourpawn, capturepawn],
+            turn: Colour::Black,
+            en_passant: Some(Position(4, 2)),
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(3, 3)).unwrap();
+        assert_eq!(moves.len(), 3);
+        assert!(moves.contains(&Position(3, 2)));
+        assert!(moves.contains(&Position(4, 2)));
+        assert!(moves.contains(&Position(2, 2)));
+        board.pieces.push(blockingpiece);
+        moves = board.get_piece_moves(Position(3, 3)).unwrap();
+        assert_eq!(moves.len(), 2);
+        assert!(moves.contains(&Position(2, 2)));
+        assert!(moves.contains(&Position(4, 2)));
     }
 
     #[test]
-    fn test_from_piecekind() {
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Pawn), "P");
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::King), "K");
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Queen), "Q");
+    fn test_knight_moves() {
+        let ourknight = Piece::new(Position(3, 1), Colour::Black, PieceKind::Knight);
+        let capturepawn = Piece::new(Position(4, 3), Colour::White, PieceKind::Pawn);
+        let blockingpiece = Piece::new(Position(1, 2), Colour::Black, PieceKind::Knight);
+        let board = Board {
+            pieces: vec![ourknight, capturepawn, blockingpiece],
+            turn: Colour::Black,
+            en_passant: None,
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(3, 1)).unwrap();
+        let mut expectation = vec![
+            Position(4, 3),
+            Position(2, 3),
+            Position(5, 2),
+            Position(5, 0),
+            Position(1, 0),
+        ];
+        moves.sort();
+        expectation.sort();
+        assert_eq!(moves, expectation);
     }
 
     #[test]
-    fn test_from_str() {
-        assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("Kn").unwrap(),
-            PieceKind::Knight
-        );
-        assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("R").unwrap(),
-            PieceKind::Rook
-        );
-        assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("B").unwrap(),
-            PieceKind::Bishop
-        );
-
-        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("G"), Err(()))
+    fn test_bishop_moves() {
+        let ourbishop = Piece::new(Position(4, 3), Colour::Black, PieceKind::Bishop);
+        let captureknight = Piece::new(Position(7, 6), Colour::White, PieceKind::Knight);
+        let blockingpiece = Piece::new(Position(6, 1), Colour::Black, PieceKind::King);
+        let board = Board {
+            pieces: vec![ourbishop, captureknight, blockingpiece],
+            turn: Colour::Black,
+            en_passant: None,
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
+        let mut expectation = vec![
+            Position(5, 4),
+            Position(6, 5),
+            Position(7, 6),
+            Position(3, 2),
+            Position(2, 1),
+            Position(1, 0),
+            Position(5, 2),
+            Position(3, 4),
+            Position(2, 5),
+            Position(1, 6),
+            Position(0, 7),
+        ];
+        moves.sort();
+        expectation.sort();
+        assert_eq!(moves, expectation);
     }
 
-    #[cfg(test)]
-    mod piece_move_tests {
-        use super::*;
+    #[test]
+    fn test_rook_moves() {
+        let ourrook = Piece::new(Position(4, 3), Colour::White, PieceKind::Rook);
+        let captureknight = Piece::new(Position(4, 6), Colour::Black, PieceKind::Knight);
+        let blockingpiece = Piece::new(Position(6, 3), Colour::White, PieceKind::King);
+        let board = Board {
+            pieces: vec![ourrook, captureknight, blockingpiece],
+            turn: Colour::White,
+            en_passant: None,
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
+        let mut expectation = vec![
+            Position(0, 3),
+            Position(1, 3),
+            Position(2, 3),
+            Position(3, 3),
+            Position(5, 3),
+            Position(4, 0),
+            Position(4, 1),
+            Position(4, 2),
+            Position(4, 4),
+            Position(4, 5),
+            Position(4, 6),
+        ];
+        moves.sort();
+        expectation.sort();
+        assert_eq!(moves, expectation);
+    }
 
-        #[test]
-        fn test_first_white_pawn_moves() {
-            let ourpawn = Piece::new(Position(3, 1), Colour::White, PieceKind::Pawn);
-            let capturepawn = Piece::new(Position(2, 2), Colour::Black, PieceKind::Pawn);
-            let blockingpiece = Piece::new(Position(3, 3), Colour::White, PieceKind::Knight);
-            let mut board = Board {
-                pieces: vec![ourpawn, capturepawn],
-                turn: Colour::White,
-                en_passant: None,
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(3, 1)).unwrap();
-            assert_eq!(moves.len(), 3);
-            assert!(moves.contains(&Position(3, 2)));
-            assert!(moves.contains(&Position(3, 3)));
-            assert!(moves.contains(&Position(2, 2)));
-            board.pieces.push(blockingpiece);
-            board.get_piece_mut(Position(2, 2)).unwrap().pos = Position(4, 2);
-            moves = board.get_piece_moves(Position(3, 1)).unwrap();
-            assert_eq!(moves.len(), 2);
-            assert!(moves.contains(&Position(3, 2)));
-            assert!(moves.contains(&Position(4, 2)));
-            board.get_piece_mut(Position(3, 3)).unwrap().pos = Position(3, 2);
-            moves = board.get_piece_moves(Position(3, 1)).unwrap();
-            assert_eq!(moves.len(), 1);
-            assert!(moves.contains(&Position(4, 2)));
-        }
+    #[test]
+    fn test_queen_moves() {
+        let ourqueen = Piece::new(Position(4, 3), Colour::White, PieceKind::Queen);
+        let captureknight = Piece::new(Position(4, 6), Colour::Black, PieceKind::Knight);
+        let blockingpiece = Piece::new(Position(6, 3), Colour::White, PieceKind::King);
+        let capturepawn = Piece::new(Position(7, 6), Colour::Black, PieceKind::Pawn);
+        let blockingpiece2 = Piece::new(Position(6, 1), Colour::White, PieceKind::Queen);
+        let board = Board {
+            pieces: vec![
+                ourqueen,
+                captureknight,
+                blockingpiece,
+                capturepawn,
+                blockingpiece2,
+            ],
+            turn: Colour::White,
+            en_passant: None,
+            castling_rights: [CastlingRights::new(), CastlingRights::new()],
+        };
+        let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
+        let mut expectation = vec![
+            Position(0, 3),
+            Position(1, 3),
+            Position(2, 3),
+            Position(3, 3),
+            Position(5, 3),
+            Position(4, 0),
+            Position(4, 1),
+            Position(4, 2),
+            Position(4, 4),
+            Position(4, 5),
+            Position(4, 6),
+            Position(5, 4),
+            Position(6, 5),
+            Position(7, 6),
+            Position(3, 2),
+            Position(2, 1),
+            Position(1, 0),
+            Position(5, 2),
+            Position(3, 4),
+            Position(2, 5),
+            Position(1, 6),
+            Position(0, 7),
+        ];
+        moves.sort();
+        expectation.sort();
+        assert_eq!(moves, expectation);
+    }
 
-        #[test]
-        fn test_black_pawn_moves() {
-            let ourpawn = Piece::new(Position(3, 3), Colour::Black, PieceKind::Pawn);
-            let capturepawn = Piece::new(Position(2, 2), Colour::White, PieceKind::Pawn);
-            let blockingpiece = Piece::new(Position(3, 2), Colour::White, PieceKind::Knight);
-            let mut board = Board {
-                pieces: vec![ourpawn, capturepawn],
-                turn: Colour::Black,
-                en_passant: Some(Position(4, 2)),
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(3, 3)).unwrap();
-            assert_eq!(moves.len(), 3);
-            assert!(moves.contains(&Position(3, 2)));
-            assert!(moves.contains(&Position(4, 2)));
-            assert!(moves.contains(&Position(2, 2)));
-            board.pieces.push(blockingpiece);
-            moves = board.get_piece_moves(Position(3, 3)).unwrap();
-            assert_eq!(moves.len(), 2);
-            assert!(moves.contains(&Position(2, 2)));
-            assert!(moves.contains(&Position(4, 2)));
-        }
-
-        #[test]
-        fn test_knight_moves() {
-            let ourknight = Piece::new(Position(3, 1), Colour::Black, PieceKind::Knight);
-            let capturepawn = Piece::new(Position(4, 3), Colour::White, PieceKind::Pawn);
-            let blockingpiece = Piece::new(Position(1, 2), Colour::Black, PieceKind::Knight);
-            let board = Board {
-                pieces: vec![ourknight, capturepawn, blockingpiece],
-                turn: Colour::Black,
-                en_passant: None,
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(3, 1)).unwrap();
-            let mut expectation = vec![
-                Position(4, 3),
-                Position(2, 3),
-                Position(5, 2),
-                Position(5, 0),
-                Position(1, 0),
-            ];
-            moves.sort();
-            expectation.sort();
-            assert_eq!(moves, expectation);
-        }
-
-        #[test]
-        fn test_bishop_moves() {
-            let ourbishop = Piece::new(Position(4, 3), Colour::Black, PieceKind::Bishop);
-            let captureknight = Piece::new(Position(7, 6), Colour::White, PieceKind::Knight);
-            let blockingpiece = Piece::new(Position(6, 1), Colour::Black, PieceKind::King);
-            let board = Board {
-                pieces: vec![ourbishop, captureknight, blockingpiece],
-                turn: Colour::Black,
-                en_passant: None,
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
-            let mut expectation = vec![
-                Position(5, 4),
-                Position(6, 5),
-                Position(7, 6),
-                Position(3, 2),
-                Position(2, 1),
-                Position(1, 0),
-                Position(5, 2),
-                Position(3, 4),
-                Position(2, 5),
-                Position(1, 6),
-                Position(0, 7),
-            ];
-            moves.sort();
-            expectation.sort();
-            assert_eq!(moves, expectation);
-        }
-
-        #[test]
-        fn test_rook_moves() {
-            let ourrook = Piece::new(Position(4, 3), Colour::White, PieceKind::Rook);
-            let captureknight = Piece::new(Position(4, 6), Colour::Black, PieceKind::Knight);
-            let blockingpiece = Piece::new(Position(6, 3), Colour::White, PieceKind::King);
-            let board = Board {
-                pieces: vec![ourrook, captureknight, blockingpiece],
-                turn: Colour::White,
-                en_passant: None,
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
-            let mut expectation = vec![
-                Position(0, 3),
-                Position(1, 3),
-                Position(2, 3),
-                Position(3, 3),
-                Position(5, 3),
-                Position(4, 0),
-                Position(4, 1),
-                Position(4, 2),
-                Position(4, 4),
-                Position(4, 5),
-                Position(4, 6),
-            ];
-            moves.sort();
-            expectation.sort();
-            assert_eq!(moves, expectation);
-        }
-
-        #[test]
-        fn test_queen_moves() {
-            let ourqueen = Piece::new(Position(4, 3), Colour::White, PieceKind::Queen);
-            let captureknight = Piece::new(Position(4, 6), Colour::Black, PieceKind::Knight);
-            let blockingpiece = Piece::new(Position(6, 3), Colour::White, PieceKind::King);
-            let capturepawn = Piece::new(Position(7, 6), Colour::Black, PieceKind::Pawn);
-            let blockingpiece2 = Piece::new(Position(6, 1), Colour::White, PieceKind::Queen);
-            let board = Board {
-                pieces: vec![ourqueen, captureknight, blockingpiece, capturepawn, blockingpiece2],
-                turn: Colour::White,
-                en_passant: None,
-                castling_rights: [CastlingRights::new(), CastlingRights::new()],
-            };
-            let mut moves = board.get_piece_moves(Position(4, 3)).unwrap();
-            let mut expectation = vec![
-                Position(0, 3),
-                Position(1, 3),
-                Position(2, 3),
-                Position(3, 3),
-                Position(5, 3),
-                Position(4, 0),
-                Position(4, 1),
-                Position(4, 2),
-                Position(4, 4),
-                Position(4, 5),
-                Position(4, 6),
-                Position(5, 4),
-                Position(6, 5),
-                Position(7, 6),
-                Position(3, 2),
-                Position(2, 1),
-                Position(1, 0),
-                Position(5, 2),
-                Position(3, 4),
-                Position(2, 5),
-                Position(1, 6),
-                Position(0, 7),
-            ];
-            moves.sort();
-            expectation.sort();
-            assert_eq!(moves, expectation);
-        }
-
-        #[test]
-        fn test_king_moves() {
-            todo!()
-        }
+    #[test]
+    fn test_king_moves() {
+        todo!()
     }
 }
