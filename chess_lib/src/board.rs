@@ -96,17 +96,19 @@ impl PLegalMoveGenerator for TransparentBoard {
             if piece.colour != self.turn {
                 return Err(ChessError::WrongColour(pos));
             }
-            let mut out = match piece.kind {
+            Ok(match piece.kind {
                 PieceKind::Pawn => self.pawn_moves(piece),
                 PieceKind::Knight => self.knight_moves(piece),
                 PieceKind::King => self.king_moves(piece),
                 _ => self.traversal_moves(piece),
-            };
+            }
             // Keep all moves with destination square between 0 and 8
-            out.retain(|test_move| {
+            .iter()
+            .filter(|test_move| {
                 (0..8).contains(&test_move.1 .0) && (0..8).contains(&test_move.1 .1)
-            });
-            Ok(out)
+            })
+            .map(|chess_move| *chess_move)
+            .collect())
         } else {
             Err(ChessError::PieceMissing(pos))
         }
@@ -185,14 +187,17 @@ impl TransparentBoard {
         }
     }
 
+    #[inline]
     fn get_all_pieces(&self) -> Vec<&Piece> {
         self.pieces.iter().collect()
     }
 
+    #[inline]
     fn get_piece(&self, pos: Position) -> Option<&Piece> {
         self.pieces.iter().find(|&piece| piece.pos == pos)
     }
 
+    #[inline]
     fn get_piece_kind(&self, kind: PieceKind) -> Vec<&Piece> {
         self.pieces
             .iter()
@@ -200,10 +205,12 @@ impl TransparentBoard {
             .collect()
     }
 
+    #[inline]
     fn get_piece_mut(&mut self, pos: Position) -> Option<&mut Piece> {
         self.pieces.iter_mut().find(|piece| piece.pos == pos)
     }
 
+    #[inline(always)] // Helper function for piece_plegal_moves so inline
     fn pawn_moves(&self, piece: &Piece) -> Vec<ChessMove> {
         let mut out: Vec<ChessMove> = vec![];
         // First square empty
@@ -257,6 +264,7 @@ impl TransparentBoard {
         out
     }
 
+    #[inline(always)] // Helper function for piece_plegal_moves so inline
     fn knight_moves(&self, piece: &Piece) -> Vec<ChessMove> {
         let mut out: Vec<ChessMove> = vec![];
         let knight_directions = [
@@ -277,6 +285,7 @@ impl TransparentBoard {
         out
     }
 
+    #[inline(always)] // Helper function for piece_plegal_moves so inline
     fn traversal_moves(&self, piece: &Piece) -> Vec<ChessMove> {
         let mut out: Vec<ChessMove> = vec![];
         let directions = match piece.kind {
@@ -302,6 +311,7 @@ impl TransparentBoard {
         out
     }
 
+    #[inline(always)] // Helper function for piece_plegal_moves so inline
     fn king_moves(&self, piece: &Piece) -> Vec<ChessMove> {
         let mut out: Vec<ChessMove> = vec![];
         for i in -1..=1 {
@@ -315,6 +325,7 @@ impl TransparentBoard {
         out
     }
 
+    #[inline]
     fn check_square_takeable(&self, piece: &Piece, square: Position) -> bool {
         if let Some(other_piece) = self.get_piece(square) {
             other_piece.colour != piece.colour

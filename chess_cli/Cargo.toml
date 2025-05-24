@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 chess_lib.workspace = true
+cursive = "0.21.1"

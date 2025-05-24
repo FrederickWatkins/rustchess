@@ -4,24 +4,22 @@ use crate::{error::*, types::*};
 pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone {
     /// Get all strictly legal moves for piece on board
     fn all_legal_moves(&self) -> Result<Vec<ChessMove>, ChessError> {
-        let mut out: Vec<ChessMove> = vec![];
-        for chess_move in self.all_plegal_moves() {
-            if self.check_king_safe(chess_move)? {
-                out.push(chess_move);
-            }
-        }
-        Ok(out)
+        Ok(self
+            .all_plegal_moves()
+            .iter()
+            .filter(|chess_move| self.check_king_safe(**chess_move).unwrap())
+            .map(|chess_move| *chess_move)
+            .collect())
     }
 
     /// Get all strictly legal moves for piece on `pos`
     fn piece_legal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
-        let mut out: Vec<ChessMove> = vec![];
-        for chess_move in self.piece_plegal_moves(pos)? {
-            if self.check_king_safe(chess_move)? {
-                out.push(chess_move);
-            }
-        }
-        Ok(out)
+        Ok(self
+            .piece_plegal_moves(pos)?
+            .iter()
+            .filter(|chess_move| self.check_king_safe(**chess_move).unwrap())
+            .map(|chess_move| *chess_move)
+            .collect())
     }
 
     /// Check moving a piece from `start` to `end` is strictly legal

@@ -8,7 +8,7 @@ pub struct Game<B: traits::Board> {
 }
 
 impl<B: traits::Board> Game<B> {
-    fn new(board: B) -> Self {
+    pub fn new(board: B) -> Self {
         let mut g = Graph::<B, ChessMove>::new();
         let curr = g.add_node(board);
         Self { moves: g, curr }
