@@ -1,23 +1,6 @@
+use crate::types::Position;
 use phf::{phf_map, Map};
-use std::ops::{Add, AddAssign, Not};
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct Position(pub i64, pub i64);
-
-impl Add for Position {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Position(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-
-impl AddAssign for Position {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = rhs + *self;
-    }
-}
-
+use std::ops::Not;
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum Colour {
     White,

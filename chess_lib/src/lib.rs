@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
-mod board;
-mod move_tree;
-mod chess_move;
+pub mod board;
+pub mod error;
+pub mod traits;
+pub mod types;
+
 mod game;
 mod piece;
+
+pub use traits::*;
