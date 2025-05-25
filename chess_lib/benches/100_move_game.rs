@@ -26,7 +26,7 @@ fn play_unchecked_moves(moves: &Vec<ChessMove>) {
 fn generate_checked_moves(moves: &Vec<ChessMove>) {
     let mut game = game::Game::<TransparentBoard>::new(TransparentBoard::starting_board());
     for chess_move in moves {
-        game.all_legal_moves().unwrap();
+        game.all_legal_moves();
         game.move_piece(*chess_move).unwrap();
     }
 }
@@ -43,7 +43,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut moves: Vec<ChessMove> = vec![];
     let mut game = game::Game::<TransparentBoard>::new(TransparentBoard::starting_board());
     for _i in 0..100 {
-        let chess_move = game.all_legal_moves().unwrap()[0];
+        let chess_move = game.all_legal_moves()[0];
         moves.push(chess_move);
         game.move_piece(chess_move).unwrap();
     }

@@ -66,17 +66,16 @@ pub struct TransparentBoard {
 }
 
 impl LegalMoveGenerator for TransparentBoard {
-    fn check_king_safe(&self, chess_move: ChessMove) -> Result<bool, ChessError> {
-        let mut test_board = self.clone();
-        test_board.move_piece(chess_move).unwrap();
-        if let Some(king) = test_board.get_piece_kind(PieceKind::King).iter().nth(0) {
-            Ok(!test_board
-                .all_plegal_moves()
-                .iter()
-                .any(|test_move| test_move.1 == king.pos))
-        } else {
-            Err(ChessError::NoKing)
-        }
+    fn check_king_safe(&self) -> Result<bool, ChessError> {
+        Ok(!self
+            .get_piece_kind(PieceKind::King)
+            .into_iter()
+            .filter(|king| king.colour != self.turn)
+            .any(|king| {
+                self.all_plegal_moves()
+                    .into_iter()
+                    .any(|test_move| test_move.1 == king.pos)
+            }))
     }
 }
 
@@ -85,8 +84,7 @@ impl PLegalMoveGenerator for TransparentBoard {
         self.pieces
             .iter()
             .filter(|piece| piece.colour == self.turn)
-            .map(|piece| self.piece_plegal_moves(piece.pos).unwrap())
-            .flatten()
+            .flat_map(|piece| self.piece_plegal_moves(piece.pos).unwrap())
             .collect()
     }
 
@@ -102,11 +100,10 @@ impl PLegalMoveGenerator for TransparentBoard {
                 _ => self.traversal_moves(piece),
             }
             // Keep all moves with destination square between 0 and 8
-            .iter()
+            .into_iter()
             .filter(|test_move| {
                 (0..8).contains(&test_move.1 .0) && (0..8).contains(&test_move.1 .1)
             })
-            .map(|chess_move| *chess_move)
             .collect())
         } else {
             Err(ChessError::PieceMissing(pos))
@@ -136,6 +133,11 @@ impl Board for TransparentBoard {
             self.turn = !self.turn;
             Ok(())
         }
+    }
+
+    #[inline]
+    fn get_piece(&self, pos: Position) -> Option<&Piece> {
+        self.pieces.iter().find(|&piece| piece.pos == pos)
     }
 
     fn from_fen(fen: &str) -> Result<Self, ChessError> {
@@ -189,11 +191,6 @@ impl TransparentBoard {
     #[inline]
     fn get_all_pieces(&self) -> Vec<&Piece> {
         self.pieces.iter().collect()
-    }
-
-    #[inline]
-    fn get_piece(&self, pos: Position) -> Option<&Piece> {
-        self.pieces.iter().find(|&piece| piece.pos == pos)
     }
 
     #[inline]
@@ -334,11 +331,17 @@ impl TransparentBoard {
     }
 
     fn fmt_board(&self) -> String {
-        let templ = "                       \n";
-        let mut outstr = String::from(templ).repeat(8);
-        for piece in &self.pieces {
-            let index = (7 - piece.pos.1 as usize) * templ.len() + piece.pos.0 as usize * 3;
-            outstr.replace_range(index..index + 2, &format!("{:2}", <&str>::from(piece.kind)));
+        let mut outstr = String::with_capacity(172);
+        for i in (0..8).rev() {
+            for j in 0..8 {
+                if let Some(piece) = self.get_piece(Position(j, i)) {
+                    outstr.push(char::from(piece.kind));
+                } else {
+                    outstr.push(' ');
+                }
+                outstr.push(' ');
+            }
+            outstr.push('\n');
         }
         outstr
     }
@@ -352,6 +355,8 @@ impl Display for TransparentBoard {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::AmbiguousMove;
+
     use super::*;
 
     #[test]
@@ -587,5 +592,21 @@ mod tests {
         moves.sort();
         expectation.sort();
         assert_eq!(moves, expectation);
+    }
+
+    #[test]
+    fn test_move_disamb() {
+        let amb_move = AmbiguousMove {
+            end: Position(4, 3),
+            kind: PieceKind::Pawn,
+            start_file: None,
+            start_rank: None,
+        };
+        let board = TransparentBoard::starting_board();
+        println!("{:?}", board.all_legal_moves());
+        assert_eq!(
+            board.disambiguate_move(amb_move).unwrap(),
+            ChessMove(Position(4, 1), Position(4, 3))
+        );
     }
 }

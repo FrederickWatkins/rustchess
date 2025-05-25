@@ -1,4 +1,4 @@
-use crate::{error::*, traits, types::*};
+use crate::{error::*, traits, types::*, piece};
 use petgraph::{stable_graph::NodeIndex, visit::EdgeRef, Graph, Incoming, Outgoing};
 
 #[derive(Clone)]
@@ -16,8 +16,20 @@ impl<B: traits::Board> Game<B> {
 }
 
 impl<B: traits::LegalMoveGenerator> traits::LegalMoveGenerator for Game<B> {
-    fn check_king_safe(&self, chess_move: ChessMove) -> Result<bool, ChessError> {
-        self.moves[self.curr].check_king_safe(chess_move)
+    fn all_legal_moves(&self) -> Vec<ChessMove> {
+        self.moves[self.curr].all_legal_moves()
+    }
+    
+    fn piece_legal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
+        self.moves[self.curr].piece_legal_moves(pos)
+    }
+    
+    fn check_move_legal(&self, chess_move: ChessMove) -> Result<bool, ChessError> {
+        self.moves[self.curr].check_move_legal(chess_move)
+    }
+
+    fn check_king_safe(&self) -> Result<bool, ChessError> {
+        self.moves[self.curr].check_king_safe()
     }
 }
 
@@ -57,6 +69,10 @@ impl<B: traits::Board + Clone> traits::Board for Game<B> {
     fn from_fen(fen: &str) -> Result<Self, ChessError> {
         Ok(Self::new(B::from_fen(fen)?))
     }
+    
+    fn get_piece(&self, pos: Position) -> Option<&piece::Piece> {
+        self.moves[self.curr].get_piece(pos)
+    }
 }
 
 impl<B: traits::Board + traits::LegalMoveGenerator> traits::Game for Game<B> {
@@ -71,5 +87,9 @@ impl<B: traits::Board + traits::LegalMoveGenerator> traits::Game for Game<B> {
 
     fn from_pgn(pgn: &str) -> Result<Self, ChessError> {
         todo!()
+    }
+
+    fn current_board(&self) -> &impl traits::Board {
+        &self.moves[self.curr]
     }
 }

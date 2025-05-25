@@ -28,13 +28,13 @@ impl Colour {
     }
 }
 
-pub static PIECE_LETTERS: Map<&'static str, PieceKind> = phf_map! {
-    "P" => PieceKind::Pawn,
-    "Kn" => PieceKind::Knight,
-    "B" => PieceKind::Bishop,
-    "R" => PieceKind::Rook,
-    "Q" => PieceKind::Queen,
-    "K" => PieceKind::King,
+pub static PIECE_LETTERS: Map<char, PieceKind> = phf_map! {
+    'P' => PieceKind::Pawn,
+    'N' => PieceKind::Knight,
+    'B' => PieceKind::Bishop,
+    'R' => PieceKind::Rook,
+    'Q' => PieceKind::Queen,
+    'K' => PieceKind::King,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
@@ -47,11 +47,11 @@ pub enum PieceKind {
     King,
 }
 
-impl TryFrom<&str> for PieceKind {
+impl TryFrom<char> for PieceKind {
     type Error = ();
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(x) = PIECE_LETTERS.get(value) {
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        if let Some(x) = PIECE_LETTERS.get(&value) {
             Ok(*x)
         } else {
             Err(())
@@ -59,9 +59,9 @@ impl TryFrom<&str> for PieceKind {
     }
 }
 
-impl From<PieceKind> for &str {
+impl From<PieceKind> for char {
     fn from(val: PieceKind) -> Self {
-        PIECE_LETTERS
+        *PIECE_LETTERS
             .entries()
             .find(|(_key, value)| value == &&val)
             .unwrap()
@@ -100,9 +100,9 @@ mod tests {
 
     #[test]
     fn test_piece_letters() {
-        assert_eq!(PIECE_LETTERS.get("K").unwrap(), &PieceKind::King);
-        assert_eq!(PIECE_LETTERS.get("Kn").unwrap(), &PieceKind::Knight);
-        assert_eq!(PIECE_LETTERS.get("R").unwrap(), &PieceKind::Rook);
+        assert_eq!(PIECE_LETTERS.get(&'K').unwrap(), &PieceKind::King);
+        assert_eq!(PIECE_LETTERS.get(&'N').unwrap(), &PieceKind::Knight);
+        assert_eq!(PIECE_LETTERS.get(&'R').unwrap(), &PieceKind::Rook);
 
         assert_eq!(
             PIECE_LETTERS
@@ -110,7 +110,7 @@ mod tests {
                 .find(|(_key, value)| value == &&PieceKind::Pawn)
                 .unwrap()
                 .0,
-            &"P"
+            &'P'
         );
         assert_eq!(
             PIECE_LETTERS
@@ -118,7 +118,7 @@ mod tests {
                 .find(|(_key, value)| value == &&PieceKind::Queen)
                 .unwrap()
                 .0,
-            &"Q"
+            &'Q'
         );
         assert_eq!(
             PIECE_LETTERS
@@ -126,32 +126,32 @@ mod tests {
                 .find(|(_key, value)| value == &&PieceKind::Bishop)
                 .unwrap()
                 .0,
-            &"B"
+            &'B'
         );
     }
 
     #[test]
     fn test_from_piecekind() {
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Pawn), "P");
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::King), "K");
-        assert_eq!(<&str as From<PieceKind>>::from(PieceKind::Queen), "Q");
+        assert_eq!(<char as From<PieceKind>>::from(PieceKind::Pawn), 'P');
+        assert_eq!(<char as From<PieceKind>>::from(PieceKind::King), 'K');
+        assert_eq!(<char as From<PieceKind>>::from(PieceKind::Queen), 'Q');
     }
 
     #[test]
     fn test_from_str() {
         assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("Kn").unwrap(),
+            <PieceKind as TryFrom<char>>::try_from('N').unwrap(),
             PieceKind::Knight
         );
         assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("R").unwrap(),
+            <PieceKind as TryFrom<char>>::try_from('R').unwrap(),
             PieceKind::Rook
         );
         assert_eq!(
-            <PieceKind as TryFrom<&str>>::try_from("B").unwrap(),
+            <PieceKind as TryFrom<char>>::try_from('B').unwrap(),
             PieceKind::Bishop
         );
 
-        assert_eq!(<PieceKind as TryFrom<&str>>::try_from("G"), Err(()))
+        assert_eq!(<PieceKind as TryFrom<char>>::try_from('G'), Err(()))
     }
 }

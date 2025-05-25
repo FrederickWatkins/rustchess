@@ -15,8 +15,8 @@ pub enum ChessError {
     #[error("Attempted to undo move when none have been played")]
     FirstMove,
 
-    #[error("No King found on the board")]
-    NoKing,
+    #[error("Ambiguous move impossible at current board state {0:?}")]
+    ImpossibleMove(AmbiguousMove),
 
     #[error("Invalid FEN")]
     InvalidFEN,

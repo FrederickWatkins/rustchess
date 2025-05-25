@@ -15,7 +15,7 @@ fn main() {
         .move_piece_checked(ChessMove(Position(4, 3), Position(3, 4)))
         .unwrap();
     println!("{}", board);
-    let mut moves = board.all_legal_moves().unwrap();
+    let mut moves = board.all_legal_moves();
     moves.sort();
     println!("{:?}", moves);
 }
