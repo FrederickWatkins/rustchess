@@ -96,6 +96,7 @@ dependencies = [
  "criterion",
  "petgraph",
  "phf",
+ "rayon",
  "thiserror",
 ]
 

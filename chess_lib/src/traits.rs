@@ -1,12 +1,13 @@
 use crate::{error::*, types::*};
+use rayon::prelude::*;
 
 /// Strict legal move generator
-pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone {
+pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone + Sync {
     /// Get all strictly legal moves for piece on board
     fn all_legal_moves(&self) -> Result<Vec<ChessMove>, ChessError> {
         Ok(self
             .all_plegal_moves()
-            .iter()
+            .par_iter() // Could ultimately make slower, need to check
             .filter(|chess_move| self.check_king_safe(**chess_move).unwrap())
             .map(|chess_move| *chess_move)
             .collect())

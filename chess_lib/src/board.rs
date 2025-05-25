@@ -82,13 +82,12 @@ impl LegalMoveGenerator for TransparentBoard {
 
 impl PLegalMoveGenerator for TransparentBoard {
     fn all_plegal_moves(&self) -> Vec<ChessMove> {
-        let mut out: Vec<ChessMove> = vec![];
-        for piece in self.pieces.iter().filter(|piece| piece.colour == self.turn) {
-            for piece_move in self.piece_plegal_moves(piece.pos).unwrap() {
-                out.push(piece_move)
-            }
-        }
-        out
+        self.pieces
+            .iter()
+            .filter(|piece| piece.colour == self.turn)
+            .map(|piece| self.piece_plegal_moves(piece.pos).unwrap())
+            .flatten()
+            .collect()
     }
 
     fn piece_plegal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
