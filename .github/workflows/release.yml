@@ -18,7 +18,7 @@ jobs:
       run: cargo build --release
     - uses: actions/upload-artifact@v4
       with:
-        name: linux/chess_cli${{ github.ref_name }}
+        name: chess_cli_${{ github.ref_name }}_linux
         path: target/release/chess_cli
 
   build-windows:
@@ -31,7 +31,7 @@ jobs:
       run: cargo build --release
     - uses: actions/upload-artifact@v4
       with:
-        name: windows/chess_cli${{ github.ref_name }}.exe
+        name: chess_cli${{ github.ref_name }}_windows.exe
         path: target/release/chess_cli.exe
 
   build-macos:
@@ -44,7 +44,7 @@ jobs:
       run: cargo build --release
     - uses: actions/upload-artifact@v4
       with:
-        name: macos/chess_cli${{ github.ref_name }}
+        name: chess_cli_${{ github.ref_name }}_macos
         path: target/release/chess_cli
       
     
