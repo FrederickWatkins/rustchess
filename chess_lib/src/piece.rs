@@ -26,6 +26,13 @@ impl Colour {
             Position(direction.0, direction.1)
         }
     }
+
+    pub fn back_rank(self) -> i8 {
+        match self {
+            Colour::White => 0,
+            Colour::Black => 7,
+        }
+    }
 }
 
 pub static PIECE_LETTERS: Map<char, PieceKind> = phf_map! {
@@ -74,6 +81,16 @@ pub struct Piece {
     pub pos: Position,
     pub colour: Colour,
     pub kind: PieceKind,
+}
+
+impl From<Piece> for char {
+    fn from(value: Piece) -> Self {
+        if value.colour == Colour::White {
+            char::from(value.kind).to_ascii_uppercase()
+        } else {
+            char::from(value.kind).to_ascii_lowercase()
+        }
+    }
 }
 
 impl Piece {

@@ -1,21 +1,34 @@
-use chess_lib::{board::TransparentBoard, types::*, *};
+use std::io;
+
+use chess_lib::{board::TransparentBoard, game::GameTree, types::*, *};
 
 fn main() {
-    let mut board = TransparentBoard::starting_board();
-    println!("{}", board);
-    board
-        .move_piece_checked(ChessMove(Position(4, 1), Position(4, 3)))
-        .unwrap();
-    println!("{}", board);
-    board
-        .move_piece_checked(ChessMove(Position(3, 6), Position(3, 4)))
-        .unwrap();
-    println!("{}", board);
-    board
-        .move_piece_checked(ChessMove(Position(4, 3), Position(3, 4)))
-        .unwrap();
-    println!("{}", board);
-    let mut moves = board.all_legal_moves();
-    moves.sort();
-    println!("{:?}", moves);
+    let mut g = GameTree::<TransparentBoard>::starting_board();
+    loop {
+        println!("{}", g.current_board());
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        input.pop();
+        match AmbiguousMove::try_from(input.as_str()) {
+            Ok(amb_move) => match g.disambiguate_move(amb_move) {
+                Ok(chess_move) => {
+                    g.move_piece(chess_move).unwrap();
+                }
+                Err(e) => {
+                    println!("{}", e);
+                    continue;
+                }
+            },
+            Err(e) => {
+                println!("{}", e);
+                continue;
+            }
+        }
+        match g.get_board_state() {
+            BoardState::Normal => (),
+            BoardState::Check => println!("Check!"),
+            BoardState::Checkmate => println!("Checkmate!"),
+            BoardState::Stalemate => println!("Stalemate!"),
+        }
+    }
 }

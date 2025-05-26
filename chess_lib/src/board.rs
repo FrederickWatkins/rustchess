@@ -1,4 +1,4 @@
-use crate::types::{ChessMove, Position};
+use crate::types::{i8_to_file, i8_to_rank, ChessMove, Position};
 use crate::{error::*, piece::*, traits::*};
 use std::fmt::Display;
 
@@ -66,16 +66,19 @@ pub struct TransparentBoard {
 }
 
 impl LegalMoveGenerator for TransparentBoard {
-    fn check_king_safe(&self) -> Result<bool, ChessError> {
-        Ok(!self
+    fn check_king_safe(&self, colour: Colour) -> bool {
+        let mut temp_board = self.clone(); // TODO: Fix this slow clone
+        temp_board.turn = !colour;
+        !temp_board
             .get_piece_kind(PieceKind::King)
             .into_iter()
-            .filter(|king| king.colour != self.turn)
+            .filter(|king| king.colour == colour)
             .any(|king| {
-                self.all_plegal_moves()
+                temp_board
+                    .all_plegal_moves()
                     .into_iter()
-                    .any(|test_move| test_move.1 == king.pos)
-            }))
+                    .any(|test_move| test_move.end == king.pos)
+            })
     }
 }
 
@@ -102,7 +105,7 @@ impl PLegalMoveGenerator for TransparentBoard {
             // Keep all moves with destination square between 0 and 8
             .into_iter()
             .filter(|test_move| {
-                (0..8).contains(&test_move.1 .0) && (0..8).contains(&test_move.1 .1)
+                (0..8).contains(&test_move.end.0) && (0..8).contains(&test_move.end.1)
             })
             .collect())
         } else {
@@ -111,24 +114,62 @@ impl PLegalMoveGenerator for TransparentBoard {
     }
 
     fn check_move_plegal(&self, chess_move: ChessMove) -> Result<bool, ChessError> {
-        Ok(self.piece_plegal_moves(chess_move.0)?.contains(&chess_move))
+        Ok(self
+            .piece_plegal_moves(chess_move.start)?
+            .contains(&chess_move))
     }
 }
 
 impl Board for TransparentBoard {
     fn move_piece(&mut self, chess_move: ChessMove) -> Result<(), ChessError> {
-        if self.get_piece(chess_move.0).is_none() {
-            Err(ChessError::PieceMissing(chess_move.0))
+        if self.get_piece(chess_move.start).is_none() {
+            Err(ChessError::PieceMissing(chess_move.start))
         } else {
             if let Some(taken_piece) = self
                 .pieces
                 .iter()
-                .position(|piece| piece.pos == chess_move.1)
+                .position(|piece| piece.pos == chess_move.end)
             {
                 self.pieces.remove(taken_piece);
             }
-            if let Some(piece) = self.get_piece_mut(chess_move.0) {
-                piece.pos = chess_move.1;
+            let piece = self.get_piece_mut(chess_move.start).unwrap();
+            let kind = piece.kind;
+            piece.pos = chess_move.end;
+
+            if let Some(promote) = chess_move.promote {
+                piece.kind = promote;
+            }
+
+            if piece.kind == PieceKind::King && chess_move.start.0 == 4 {
+                match chess_move.end.0 {
+                    1 => {
+                        self.get_piece_mut(Position(0, chess_move.start.1))
+                            .ok_or(ChessError::IllegalMove(chess_move))?
+                            .pos = Position(2, chess_move.start.1)
+                    }
+                    6 => {
+                        self.get_piece_mut(Position(7, chess_move.start.1))
+                            .ok_or(ChessError::IllegalMove(chess_move))?
+                            .pos = Position(5, chess_move.start.1)
+                    }
+                    _ => (),
+                }
+            }
+            if kind == PieceKind::Pawn
+                && chess_move.end == chess_move.start + self.turn.direction(Position(0, 2))
+            {
+                self.en_passant = Some(chess_move.start + self.turn.direction(Position(0, 1)));
+            } else {
+                self.en_passant = None;
+            }
+            if kind == PieceKind::Pawn
+                && chess_move.end == self.en_passant.unwrap_or(Position(0, 0))
+            {
+                if let Some(taken_piece) = self.pieces.iter().position(|other_piece| {
+                    other_piece.pos == chess_move.end + other_piece.colour.direction(Position(0, 1))
+                }) {
+                    self.pieces.remove(taken_piece);
+                }
             }
             self.turn = !self.turn;
             Ok(())
@@ -143,10 +184,12 @@ impl Board for TransparentBoard {
     fn from_fen(fen: &str) -> Result<Self, ChessError> {
         todo!()
     }
-}
 
-impl TransparentBoard {
-    pub fn starting_board() -> Self {
+    fn turn(&self) -> Colour {
+        self.turn
+    }
+
+    fn starting_board() -> Self {
         TransparentBoard {
             pieces: vec![
                 Piece::new(Position(0, 0), Colour::White, PieceKind::Rook),
@@ -187,7 +230,9 @@ impl TransparentBoard {
             castling_rights: [CastlingRights::new(), CastlingRights::new()],
         }
     }
+}
 
+impl TransparentBoard {
     #[inline]
     fn get_all_pieces(&self) -> Vec<&Piece> {
         self.pieces.iter().collect()
@@ -214,10 +259,11 @@ impl TransparentBoard {
             .get_piece(piece.pos + piece.direction(Position(0, 1)))
             .is_none()
         {
-            out.push(ChessMove(
-                piece.pos,
-                piece.pos + piece.direction(Position(0, 1)),
-            ));
+            out.push(ChessMove {
+                start: piece.pos,
+                end: piece.pos + piece.direction(Position(0, 1)),
+                promote: None,
+            });
             // Piece on starting row and second square empty
             if self
                 .get_piece(piece.pos + piece.direction(Position(0, 2)))
@@ -228,36 +274,73 @@ impl TransparentBoard {
                         Colour::Black => 6,
                     }
             {
-                out.push(ChessMove(
-                    piece.pos,
-                    piece.pos + piece.direction(Position(0, 2)),
-                ))
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: piece.pos + piece.direction(Position(0, 2)),
+                    promote: None,
+                })
             }
         }
         if let Some(other_piece) = self.get_piece(piece.pos + piece.direction(Position(1, 1))) {
             if other_piece.colour != piece.colour {
-                out.push(ChessMove(
-                    piece.pos,
-                    piece.pos + piece.direction(Position(1, 1)),
-                ));
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: piece.pos + piece.direction(Position(1, 1)),
+                    promote: None,
+                });
             }
         }
         if let Some(other_piece) = self.get_piece(piece.pos + piece.direction(Position(-1, 1))) {
             if other_piece.colour != piece.colour {
-                out.push(ChessMove(
-                    piece.pos,
-                    piece.pos + piece.direction(Position(-1, 1)),
-                ));
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: piece.pos + piece.direction(Position(-1, 1)),
+                    promote: None,
+                });
             }
         }
         if let Some(en_passant) = self.en_passant {
             if en_passant == piece.pos + piece.direction(Position(1, 1))
                 || en_passant == piece.pos + piece.direction(Position(-1, 1))
             {
-                out.push(ChessMove(piece.pos, en_passant));
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: en_passant,
+                    promote: None,
+                });
             }
         }
         out
+    }
+
+    fn pawn_promotions(&self, start: Position, end: Position) -> Vec<ChessMove> {
+        // TODO Use this function for pawns
+        if end.1 == 0 || end.1 == 7 {
+            vec![
+                ChessMove {
+                    start,
+                    end,
+                    promote: Some(PieceKind::Knight),
+                },
+                ChessMove {
+                    start,
+                    end,
+                    promote: Some(PieceKind::Bishop),
+                },
+                ChessMove {
+                    start,
+                    end,
+                    promote: Some(PieceKind::Rook),
+                },
+                ChessMove {
+                    start,
+                    end,
+                    promote: Some(PieceKind::Queen),
+                },
+            ]
+        } else {
+            vec![]
+        }
     }
 
     #[inline(always)] // Helper function for piece_plegal_moves so inline
@@ -275,7 +358,11 @@ impl TransparentBoard {
         ];
         for direction in knight_directions {
             if self.check_square_takeable(piece, piece.pos + direction) {
-                out.push(ChessMove(piece.pos, piece.pos + direction))
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: piece.pos + direction,
+                    promote: None,
+                })
             }
         }
         out
@@ -297,11 +384,19 @@ impl TransparentBoard {
                 && (0..8).contains(&curr_pos.0)
                 && (0..8).contains(&curr_pos.1)
             {
-                out.push(ChessMove(piece.pos, curr_pos));
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: curr_pos,
+                    promote: None,
+                });
                 curr_pos += direction;
             }
             if self.check_square_takeable(piece, curr_pos) {
-                out.push(ChessMove(piece.pos, curr_pos));
+                out.push(ChessMove {
+                    start: piece.pos,
+                    end: curr_pos,
+                    promote: None,
+                });
             }
         }
         out
@@ -314,7 +409,11 @@ impl TransparentBoard {
             for j in -1..=1 {
                 let pos = piece.pos + Position(i, j);
                 if self.check_square_takeable(piece, pos) {
-                    out.push(ChessMove(piece.pos, pos))
+                    out.push(ChessMove {
+                        start: piece.pos,
+                        end: pos,
+                        promote: None,
+                    })
                 }
             }
         }
@@ -333,15 +432,24 @@ impl TransparentBoard {
     fn fmt_board(&self) -> String {
         let mut outstr = String::with_capacity(172);
         for i in (0..8).rev() {
+            outstr.push(i8_to_rank(i));
             for j in 0..8 {
+                outstr.push(' ');
                 if let Some(piece) = self.get_piece(Position(j, i)) {
-                    outstr.push(char::from(piece.kind));
+                    outstr.push(char::from(*piece));
+                } else if (i + j) % 2 == 1 {
+                    outstr.push('☐');
                 } else {
                     outstr.push(' ');
                 }
-                outstr.push(' ');
             }
             outstr.push('\n');
+        }
+
+        outstr.push_str("  ");
+        for j in 0..8 {
+            outstr.push(i8_to_file(j));
+            outstr.push(' ');
         }
         outstr
     }
@@ -354,7 +462,7 @@ impl Display for TransparentBoard {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests { // TODO add tests for pawn promotion and for move_piece_checked
     use crate::types::AmbiguousMove;
 
     use super::*;
@@ -373,19 +481,43 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(3, 1)).unwrap();
         assert_eq!(moves.len(), 3);
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(3, 2))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(3, 3))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(2, 2))));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(3, 2),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(3, 3),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(2, 2),
+            promote: None
+        }));
         board.pieces.push(blockingpiece);
         board.get_piece_mut(Position(2, 2)).unwrap().pos = Position(4, 2);
         moves = board.piece_plegal_moves(Position(3, 1)).unwrap();
         assert_eq!(moves.len(), 2);
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(3, 2))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(4, 2))));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(3, 2),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(4, 2),
+            promote: None
+        }));
         board.get_piece_mut(Position(3, 3)).unwrap().pos = Position(3, 2);
         moves = board.piece_plegal_moves(Position(3, 1)).unwrap();
         assert_eq!(moves.len(), 1);
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(4, 2))));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(4, 2),
+            promote: None
+        }));
     }
 
     #[test]
@@ -402,14 +534,34 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(3, 3)).unwrap();
         assert_eq!(moves.len(), 3);
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(3, 2))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(4, 2))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(2, 2))));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(3, 2),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(4, 2),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(2, 2),
+            promote: None
+        }));
         board.pieces.push(blockingpiece);
         moves = board.piece_plegal_moves(Position(3, 3)).unwrap();
         assert_eq!(moves.len(), 2);
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(2, 2))));
-        assert!(moves.contains(&ChessMove(pawn_pos, Position(4, 2))));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(2, 2),
+            promote: None
+        }));
+        assert!(moves.contains(&ChessMove {
+            start: pawn_pos,
+            end: Position(4, 2),
+            promote: None
+        }));
     }
 
     #[test]
@@ -426,11 +578,31 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(3, 1)).unwrap();
         let mut expectation = vec![
-            ChessMove(knight_pos, Position(4, 3)),
-            ChessMove(knight_pos, Position(2, 3)),
-            ChessMove(knight_pos, Position(5, 2)),
-            ChessMove(knight_pos, Position(5, 0)),
-            ChessMove(knight_pos, Position(1, 0)),
+            ChessMove {
+                start: knight_pos,
+                end: Position(4, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: knight_pos,
+                end: Position(2, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: knight_pos,
+                end: Position(5, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: knight_pos,
+                end: Position(5, 0),
+                promote: None,
+            },
+            ChessMove {
+                start: knight_pos,
+                end: Position(1, 0),
+                promote: None,
+            },
         ];
         moves.sort();
         expectation.sort();
@@ -451,17 +623,61 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(4, 3)).unwrap();
         let mut expectation = vec![
-            ChessMove(bishop_pos, Position(5, 4)),
-            ChessMove(bishop_pos, Position(6, 5)),
-            ChessMove(bishop_pos, Position(7, 6)),
-            ChessMove(bishop_pos, Position(3, 2)),
-            ChessMove(bishop_pos, Position(2, 1)),
-            ChessMove(bishop_pos, Position(1, 0)),
-            ChessMove(bishop_pos, Position(5, 2)),
-            ChessMove(bishop_pos, Position(3, 4)),
-            ChessMove(bishop_pos, Position(2, 5)),
-            ChessMove(bishop_pos, Position(1, 6)),
-            ChessMove(bishop_pos, Position(0, 7)),
+            ChessMove {
+                start: bishop_pos,
+                end: Position(5, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(6, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(7, 6),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(3, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(2, 1),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(1, 0),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(5, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(3, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(2, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(1, 6),
+                promote: None,
+            },
+            ChessMove {
+                start: bishop_pos,
+                end: Position(0, 7),
+                promote: None,
+            },
         ];
         moves.sort();
         expectation.sort();
@@ -482,17 +698,61 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(4, 3)).unwrap();
         let mut expectation = vec![
-            ChessMove(rook_pos, Position(0, 3)),
-            ChessMove(rook_pos, Position(1, 3)),
-            ChessMove(rook_pos, Position(2, 3)),
-            ChessMove(rook_pos, Position(3, 3)),
-            ChessMove(rook_pos, Position(5, 3)),
-            ChessMove(rook_pos, Position(4, 0)),
-            ChessMove(rook_pos, Position(4, 1)),
-            ChessMove(rook_pos, Position(4, 2)),
-            ChessMove(rook_pos, Position(4, 4)),
-            ChessMove(rook_pos, Position(4, 5)),
-            ChessMove(rook_pos, Position(4, 6)),
+            ChessMove {
+                start: rook_pos,
+                end: Position(0, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(1, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(2, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(3, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(5, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 0),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 1),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: rook_pos,
+                end: Position(4, 6),
+                promote: None,
+            },
         ];
         moves.sort();
         expectation.sort();
@@ -521,28 +781,116 @@ mod tests {
         };
         let mut moves = board.piece_plegal_moves(Position(4, 3)).unwrap();
         let mut expectation = vec![
-            ChessMove(queen_pos, Position(0, 3)),
-            ChessMove(queen_pos, Position(1, 3)),
-            ChessMove(queen_pos, Position(2, 3)),
-            ChessMove(queen_pos, Position(3, 3)),
-            ChessMove(queen_pos, Position(5, 3)),
-            ChessMove(queen_pos, Position(4, 0)),
-            ChessMove(queen_pos, Position(4, 1)),
-            ChessMove(queen_pos, Position(4, 2)),
-            ChessMove(queen_pos, Position(4, 4)),
-            ChessMove(queen_pos, Position(4, 5)),
-            ChessMove(queen_pos, Position(4, 6)),
-            ChessMove(queen_pos, Position(5, 4)),
-            ChessMove(queen_pos, Position(6, 5)),
-            ChessMove(queen_pos, Position(7, 6)),
-            ChessMove(queen_pos, Position(3, 2)),
-            ChessMove(queen_pos, Position(2, 1)),
-            ChessMove(queen_pos, Position(1, 0)),
-            ChessMove(queen_pos, Position(5, 2)),
-            ChessMove(queen_pos, Position(3, 4)),
-            ChessMove(queen_pos, Position(2, 5)),
-            ChessMove(queen_pos, Position(1, 6)),
-            ChessMove(queen_pos, Position(0, 7)),
+            ChessMove {
+                start: queen_pos,
+                end: Position(0, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(1, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(2, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(3, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(5, 3),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 0),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 1),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(4, 6),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(5, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(6, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(7, 6),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(3, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(2, 1),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(1, 0),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(5, 2),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(3, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(2, 5),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(1, 6),
+                promote: None,
+            },
+            ChessMove {
+                start: queen_pos,
+                end: Position(0, 7),
+                promote: None,
+            },
         ];
         moves.sort();
         expectation.sort();
@@ -586,8 +934,16 @@ mod tests {
         );
         let mut moves = board.piece_legal_moves(Position(4, 3)).unwrap();
         let mut expectation = vec![
-            ChessMove(king_pos, Position(4, 4)),
-            ChessMove(king_pos, Position(5, 2)),
+            ChessMove {
+                start: king_pos,
+                end: Position(4, 4),
+                promote: None,
+            },
+            ChessMove {
+                start: king_pos,
+                end: Position(5, 2),
+                promote: None,
+            },
         ];
         moves.sort();
         expectation.sort();
@@ -596,17 +952,22 @@ mod tests {
 
     #[test]
     fn test_move_disamb() {
-        let amb_move = AmbiguousMove {
+        let amb_move = AmbiguousMove::Standard {
             end: Position(4, 3),
             kind: PieceKind::Pawn,
             start_file: None,
             start_rank: None,
+            promote: None,
         };
         let board = TransparentBoard::starting_board();
         println!("{:?}", board.all_legal_moves());
         assert_eq!(
             board.disambiguate_move(amb_move).unwrap(),
-            ChessMove(Position(4, 1), Position(4, 3))
+            ChessMove {
+                start: Position(4, 1),
+                end: Position(4, 3),
+                promote: None
+            }
         );
     }
 }
