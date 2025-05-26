@@ -1,9 +1,9 @@
 [workspace]
 resolver="3"
-members=["chess_cli", "chess_lib"]
+members=["unchess_cli", "unchess_lib"]
 [workspace.dependencies]
-chess_lib = {path = "chess_lib"}
-chess_cli = {path = "chess_cli"}
+unchess-lib = {path = "unchess_lib"}
+unchess-cli = {path = "unchess_cli"}
 
 [profile.release]
 opt-level = 3

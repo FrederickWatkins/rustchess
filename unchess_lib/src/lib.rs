@@ -8,3 +8,6 @@ pub mod game;
 mod piece;
 
 pub use traits::*;
+
+#[doc = include_str!("../../Readme.md")]
+pub struct ReadmeDoctests;

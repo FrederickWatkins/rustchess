@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::{
     error::*,
     piece::{self, Colour},
@@ -125,8 +123,6 @@ impl<B: Board + LegalMoveGenerator> Game<B> for GameTree<B> {
 
 #[cfg(test)]
 mod tests {
-    use std::hint::black_box;
-
     use crate::{board::TransparentBoard, piece::PieceKind};
 
     use super::*;
