@@ -19,7 +19,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ github.ref_name }}
-        upload: target/release/chess_cli
+        path: target/release/chess_cli
 
   build-windows:
 
@@ -32,7 +32,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ github.ref_name }}
-        upload: target/release/chess_cli.exe
+        path: target/release/chess_cli.exe
 
   build-macos:
 
@@ -45,6 +45,6 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ github.ref_name }}
-        upload: target/release/chess_cli
+        path: target/release/chess_cli
       
     
