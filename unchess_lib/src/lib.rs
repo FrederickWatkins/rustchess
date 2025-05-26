@@ -9,6 +9,6 @@ mod piece;
 
 pub use traits::*;
 
-#[cfg(doctests)]
+#[cfg(doctest)]
 #[doc = include_str!("../../Readme.md")]
 pub struct ReadmeDoctests;
