@@ -1,6 +1,6 @@
 use std::io;
 
-use chess_lib::{board::TransparentBoard, game::GameTree, types::*, *};
+use unchess_lib::{board::TransparentBoard, game::GameTree, types::*, *};
 
 fn main() {
     let mut g = GameTree::<TransparentBoard>::starting_board();

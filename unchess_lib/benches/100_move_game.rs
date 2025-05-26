@@ -1,4 +1,4 @@
-use chess_lib::{
+use unchess_lib::{
     board::TransparentBoard, game, traits::*, types::ChessMove, Board, LegalMoveGenerator,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
