@@ -20,7 +20,7 @@ fn main() {
 ```
 
 ### unchess-cli
-```shell-session
+```console
 foo@bar:~$ unchess-cli
 8 r n b q k b n r
 7 p p p p p p p p
