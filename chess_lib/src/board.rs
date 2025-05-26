@@ -259,11 +259,9 @@ impl TransparentBoard {
             .get_piece(piece.pos + piece.direction(Position(0, 1)))
             .is_none()
         {
-            out.push(ChessMove {
-                start: piece.pos,
-                end: piece.pos + piece.direction(Position(0, 1)),
-                promote: None,
-            });
+            out.append(
+                &mut self.pawn_promotions(piece.pos, piece.pos + piece.direction(Position(0, 1))),
+            );
             // Piece on starting row and second square empty
             if self
                 .get_piece(piece.pos + piece.direction(Position(0, 2)))
@@ -283,20 +281,16 @@ impl TransparentBoard {
         }
         if let Some(other_piece) = self.get_piece(piece.pos + piece.direction(Position(1, 1))) {
             if other_piece.colour != piece.colour {
-                out.push(ChessMove {
-                    start: piece.pos,
-                    end: piece.pos + piece.direction(Position(1, 1)),
-                    promote: None,
-                });
+                out.append(
+                    &mut self
+                        .pawn_promotions(piece.pos, piece.pos + piece.direction(Position(1, 1))),
+                );
             }
         }
         if let Some(other_piece) = self.get_piece(piece.pos + piece.direction(Position(-1, 1))) {
             if other_piece.colour != piece.colour {
-                out.push(ChessMove {
-                    start: piece.pos,
-                    end: piece.pos + piece.direction(Position(-1, 1)),
-                    promote: None,
-                });
+                
+            out.append(&mut self.pawn_promotions(piece.pos, piece.pos + piece.direction(Position(-1, 1))));
             }
         }
         if let Some(en_passant) = self.en_passant {
@@ -314,7 +308,6 @@ impl TransparentBoard {
     }
 
     fn pawn_promotions(&self, start: Position, end: Position) -> Vec<ChessMove> {
-        // TODO Use this function for pawns
         if end.1 == 0 || end.1 == 7 {
             vec![
                 ChessMove {
@@ -339,7 +332,11 @@ impl TransparentBoard {
                 },
             ]
         } else {
-            vec![]
+            vec![ChessMove {
+                start,
+                end,
+                promote: None,
+            }]
         }
     }
 
@@ -462,7 +459,8 @@ impl Display for TransparentBoard {
 }
 
 #[cfg(test)]
-mod tests { // TODO add tests for pawn promotion and for move_piece_checked
+mod tests {
+    // TODO add tests for pawn promotion and for move_piece_checked
     use crate::types::AmbiguousMove;
 
     use super::*;
