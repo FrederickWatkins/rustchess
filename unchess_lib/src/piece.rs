@@ -1,10 +1,12 @@
-use crate::types::Position;
+use crate::types::IntChessSquare;
 use phf::{phf_map, Map};
+use strum::{EnumCount, FromRepr};
 use std::ops::Not;
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, FromRepr)]
 pub enum Colour {
-    White,
-    Black,
+    White = 1,
+    Black = 0,
 }
 
 impl Not for Colour {
@@ -19,11 +21,11 @@ impl Not for Colour {
 }
 
 impl Colour {
-    pub fn direction(self, direction: Position) -> Position {
+    pub fn direction(self, direction: IntChessSquare) -> IntChessSquare {
         if self == Colour::Black {
-            Position(direction.0, -direction.1)
+            IntChessSquare(direction.0, -direction.1)
         } else {
-            Position(direction.0, direction.1)
+            IntChessSquare(direction.0, direction.1)
         }
     }
 
@@ -44,10 +46,10 @@ pub static PIECE_LETTERS: Map<char, PieceKind> = phf_map! {
     'K' => PieceKind::King,
 };
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Hash, EnumCount, FromRepr)]
 pub enum PieceKind {
-    Pawn,
     Knight,
+    Pawn,
     Bishop,
     Rook,
     Queen,
@@ -76,9 +78,22 @@ impl From<PieceKind> for char {
     }
 }
 
+impl PieceKind {
+    pub fn value(&self) -> u64 {
+        match self {
+            PieceKind::Pawn => 1,
+            PieceKind::Knight => 3,
+            PieceKind::Bishop => 3,
+            PieceKind::Rook => 5,
+            PieceKind::Queen => 9,
+            PieceKind::King => 0,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct Piece {
-    pub pos: Position,
+    pub pos: IntChessSquare,
     pub colour: Colour,
     pub kind: PieceKind,
 }
@@ -94,11 +109,11 @@ impl From<Piece> for char {
 }
 
 impl Piece {
-    pub fn new(pos: Position, colour: Colour, kind: PieceKind) -> Self {
+    pub fn new(pos: IntChessSquare, colour: Colour, kind: PieceKind) -> Self {
         Piece { pos, colour, kind }
     }
 
-    pub fn direction(&self, direction: Position) -> Position {
+    pub fn direction(&self, direction: IntChessSquare) -> IntChessSquare {
         self.colour.direction(direction)
     }
 }
@@ -109,10 +124,10 @@ mod tests {
 
     #[test]
     fn test_add() {
-        let pos1 = Position(3, 5);
-        let pos2 = Position(4, 3);
+        let pos1 = IntChessSquare(3, 5);
+        let pos2 = IntChessSquare(4, 3);
         let result = pos1 + pos2;
-        assert_eq!(result, Position(7, 8))
+        assert_eq!(result, IntChessSquare(7, 8))
     }
 
     #[test]

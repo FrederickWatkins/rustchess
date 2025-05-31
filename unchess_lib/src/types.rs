@@ -9,23 +9,23 @@ use std::{
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct Position(pub i8, pub i8);
+pub struct IntChessSquare(pub i8, pub i8);
 
-impl Add for Position {
+impl Add for IntChessSquare {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Position(self.0 + rhs.0, self.1 + rhs.1)
+        IntChessSquare(self.0 + rhs.0, self.1 + rhs.1)
     }
 }
 
-impl AddAssign for Position {
+impl AddAssign for IntChessSquare {
     fn add_assign(&mut self, rhs: Self) {
         *self = rhs + *self;
     }
 }
 
-impl TryFrom<&str> for Position {
+impl TryFrom<&str> for IntChessSquare {
     type Error = ChessError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
@@ -40,7 +40,7 @@ impl TryFrom<&str> for Position {
     }
 }
 
-impl Display for Position {
+impl Display for IntChessSquare {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}", i8_to_file(self.0), i8_to_rank(self.1))
     }
@@ -54,8 +54,8 @@ pub enum CastlingSide {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct ChessMove {
-    pub start: Position,
-    pub end: Position,
+    pub start: IntChessSquare,
+    pub end: IntChessSquare,
     pub promote: Option<PieceKind>,
 }
 
@@ -108,7 +108,7 @@ pub fn i8_to_file(x: i8) -> char {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum AmbiguousMove {
     Standard {
-        end: Position,
+        end: IntChessSquare,
         kind: PieceKind,
         start_file: Option<i8>,
         start_rank: Option<i8>,
@@ -139,7 +139,7 @@ impl Display for AmbiguousMove {
                 }
                 write!(f, "{}", end)?;
                 if let Some(pro) = promote {
-                    write!(f, "{}", '=')?;
+                    write!(f, "=")?;
                     write!(f, "{}", char::from(*pro))
                 } else {
                     Ok(())
@@ -206,7 +206,7 @@ impl TryFrom<&str> for AmbiguousMove {
             }
         }
         Ok(Self::Standard {
-            end: Position(*file, *rank),
+            end: IntChessSquare(*file, *rank),
             kind,
             start_file,
             start_rank,
@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     #[test]
     fn pos_display() {
-        assert_eq!(format!("{}", Position(5, 3)), *"f4");
+        assert_eq!(format!("{}", IntChessSquare(5, 3)), *"f4");
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("e4").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(4, 3),
+                end: IntChessSquare(4, 3),
                 kind: PieceKind::Pawn,
                 start_file: None,
                 start_rank: None,
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("Bc7").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(2, 6),
+                end: IntChessSquare(2, 6),
                 kind: PieceKind::Bishop,
                 start_file: None,
                 start_rank: None,
@@ -267,7 +267,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("Bb1").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(1, 0),
+                end: IntChessSquare(1, 0),
                 kind: PieceKind::Bishop,
                 start_file: None,
                 start_rank: None,
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("N7xc5").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(2, 4),
+                end: IntChessSquare(2, 4),
                 kind: PieceKind::Knight,
                 start_file: None,
                 start_rank: Some(6),
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("Bb7xb6#").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(1, 5),
+                end: IntChessSquare(1, 5),
                 kind: PieceKind::Bishop,
                 start_file: Some(1),
                 start_rank: Some(6),
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("Rh6xh4+").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(7, 3),
+                end: IntChessSquare(7, 3),
                 kind: PieceKind::Rook,
                 start_file: Some(7),
                 start_rank: Some(5),
@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("Nge7+").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(4, 6),
+                end: IntChessSquare(4, 6),
                 kind: PieceKind::Knight,
                 start_file: Some(6),
                 start_rank: None,
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("h6").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(7, 5),
+                end: IntChessSquare(7, 5),
                 kind: PieceKind::Pawn,
                 start_file: None,
                 start_rank: None,
@@ -327,7 +327,7 @@ mod tests {
         assert_eq!(
             AmbiguousMove::try_from("h8=Q").unwrap(),
             AmbiguousMove::Standard {
-                end: Position(7, 7),
+                end: IntChessSquare(7, 7),
                 kind: PieceKind::Pawn,
                 start_file: None,
                 start_rank: None,

@@ -20,7 +20,7 @@ pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone + Sync {
     }
 
     /// Get all strictly legal moves for piece on `pos`
-    fn piece_legal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
+    fn piece_legal_moves(&self, pos: IntChessSquare) -> Result<Vec<ChessMove>, ChessError> {
         Ok(self
             .piece_plegal_moves(pos)?
             .into_iter()
@@ -81,20 +81,20 @@ pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone + Sync {
                 if moves.len() > 1 {
                     return Err(ChessError::UnderdefinedMove(amb_move));
                 }
-                match moves.iter().next() {
+                match moves.first() {
                     Some(chess_move) => Ok(*chess_move),
                     None => Err(ChessError::ImpossibleMove(amb_move)),
                 }
             }
             AmbiguousMove::Castle(castling_side) => Ok(match castling_side {
                 CastlingSide::QueenSide => ChessMove {
-                    start: Position(4, self.turn().back_rank()),
-                    end: Position(1, self.turn().back_rank()),
+                    start: IntChessSquare(4, self.turn().back_rank()),
+                    end: IntChessSquare(1, self.turn().back_rank()),
                     promote: None,
                 },
                 CastlingSide::KingSide => ChessMove {
-                    start: Position(4, self.turn().back_rank()),
-                    end: Position(6, self.turn().back_rank()),
+                    start: IntChessSquare(4, self.turn().back_rank()),
+                    end: IntChessSquare(6, self.turn().back_rank()),
                     promote: None,
                 },
             }),
@@ -102,18 +102,11 @@ pub trait LegalMoveGenerator: Board + PLegalMoveGenerator + Clone + Sync {
     }
 
     fn get_board_state(&self) -> BoardState {
-        if !self.all_legal_moves().is_empty() {
-            if self.check_king_safe(self.turn()) {
-                BoardState::Normal
-            } else {
-                BoardState::Check
-            }
-        } else {
-            if self.check_king_safe(self.turn()) {
-                BoardState::Stalemate
-            } else {
-                BoardState::Checkmate
-            }
+        match (self.all_legal_moves().is_empty(), self.check_king_safe(self.turn())) {
+            (true, true) => BoardState::Stalemate,
+            (true, false) => BoardState::Checkmate,
+            (false, true) => BoardState::Normal,
+            (false, false) => BoardState::Check,
         }
     }
 }
@@ -124,7 +117,7 @@ pub trait PLegalMoveGenerator: Board {
     fn all_plegal_moves(&self) -> Vec<ChessMove>;
 
     /// Get all pseudo-legal moves for piece on `pos`
-    fn piece_plegal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError>;
+    fn piece_plegal_moves(&self, pos: IntChessSquare) -> Result<Vec<ChessMove>, ChessError>;
 
     /// Check moving a piece from `start` to `end` is pseudo-legal
     fn check_move_plegal(&self, chess_move: ChessMove) -> Result<bool, ChessError>;
@@ -145,7 +138,7 @@ pub trait Board: Sized {
     fn starting_board() -> Self;
 
     /// Get piece at `pos`
-    fn get_piece(&self, pos: Position) -> Option<&Piece>;
+    fn get_piece(&self, pos: IntChessSquare) -> Option<&Piece>;
 
     /// Move a piece from `start` to `end` without checking for legality
     fn move_piece(&mut self, chess_move: ChessMove) -> Result<(), ChessError>;
@@ -155,6 +148,8 @@ pub trait Board: Sized {
 
     /// Return colour of current turn
     fn turn(&self) -> Colour;
+
+    fn get_all_pieces(&self) -> &Vec<Piece>;
 }
 
 /// Chess Game

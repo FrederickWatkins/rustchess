@@ -27,7 +27,7 @@ impl<B: LegalMoveGenerator> LegalMoveGenerator for GameTree<B> {
         self.moves[self.curr].all_legal_moves()
     }
 
-    fn piece_legal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
+    fn piece_legal_moves(&self, pos: IntChessSquare) -> Result<Vec<ChessMove>, ChessError> {
         self.moves[self.curr].piece_legal_moves(pos)
     }
 
@@ -45,7 +45,7 @@ impl<B: PLegalMoveGenerator + Clone> PLegalMoveGenerator for GameTree<B> {
         self.moves[self.curr].all_plegal_moves()
     }
 
-    fn piece_plegal_moves(&self, pos: Position) -> Result<Vec<ChessMove>, ChessError> {
+    fn piece_plegal_moves(&self, pos: IntChessSquare) -> Result<Vec<ChessMove>, ChessError> {
         self.moves[self.curr].piece_plegal_moves(pos)
     }
 
@@ -77,8 +77,12 @@ impl<B: Board + Clone> Board for GameTree<B> {
         Ok(Self::new(B::from_fen(fen)?))
     }
 
-    fn get_piece(&self, pos: Position) -> Option<&piece::Piece> {
+    fn get_piece(&self, pos: IntChessSquare) -> Option<&piece::Piece> {
         self.moves[self.curr].get_piece(pos)
+    }
+
+    fn get_all_pieces(&self) -> &Vec<piece::Piece> {
+        self.moves[self.curr].get_all_pieces()
     }
 
     fn turn(&self) -> Colour {
@@ -161,19 +165,19 @@ mod tests {
         41. Kc1 Rc2#"#;
         let g = GameTree::<TransparentBoard>::from_pgn(pgn).unwrap();
         assert_eq!(
-            g.get_piece(Position::try_from("c1").unwrap()).unwrap().kind,
+            g.get_piece(IntChessSquare::try_from("c1").unwrap()).unwrap().kind,
             PieceKind::King
         );
         assert_eq!(
-            g.get_piece(Position::try_from("e5").unwrap()).unwrap().kind,
+            g.get_piece(IntChessSquare::try_from("e5").unwrap()).unwrap().kind,
             PieceKind::Knight
         );
         assert_eq!(
-            g.get_piece(Position::try_from("g7").unwrap()).unwrap().kind,
+            g.get_piece(IntChessSquare::try_from("g7").unwrap()).unwrap().kind,
             PieceKind::King
         );
         assert_eq!(
-            g.get_piece(Position::try_from("b8").unwrap()).unwrap().kind,
+            g.get_piece(IntChessSquare::try_from("b8").unwrap()).unwrap().kind,
             PieceKind::Queen
         );
         assert_eq!(g.get_board_state(), BoardState::Checkmate)

@@ -5,7 +5,8 @@ pub mod error;
 pub mod traits;
 pub mod types;
 pub mod game;
-mod piece;
+pub mod engine;
+pub mod piece;
 
 pub use traits::*;
 
