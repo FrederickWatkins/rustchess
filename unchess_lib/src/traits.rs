@@ -16,7 +16,7 @@ use crate::{
 ///
 /// Can't be a transparent shared data type because of differences in internal board
 /// representations, so setters and getters must be used instead.
-pub trait ChessSquare: Debug + Display + Copy {
+pub trait ChessSquare: Debug + Display + Copy + Eq {
     /// File of the square
     ///
     /// Returns a value from 0-7 inclusive where 0 represents the a-file and 7 the h-file.
@@ -52,13 +52,26 @@ pub trait ChessPiece {
 
     /// The colour of the piece
     fn colour(&self) -> PieceColour;
+
+    /// Piece value based on the Modenese School standard
+    ///
+    /// These are considered the universal standard material valuations in modern chess.
+    fn value(&self) -> u8 {
+        match self.kind() {
+            PieceKind::King => 0,
+            PieceKind::Queen => 9,
+            PieceKind::Rook => 5,
+            PieceKind::Bishop | PieceKind::Knight => 3,
+            PieceKind::Pawn => 1,
+        }
+    }
 }
 
 /// Chess board
 ///
 /// Implies no ability to check the legality of moves or to ensure that the board is in a valid
 /// state, just the ability to store and manipulate internal state
-pub trait ChessBoard {
+pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove> {
     /// Return the default starting chess board
     ///
     /// White's turn, all pieces in starting positions, with castling rights.
@@ -67,12 +80,12 @@ pub trait ChessBoard {
     /// Return piece at `square`
     ///
     /// Returns none if no piece present.
-    fn get_piece(&self, square: impl ChessSquare) -> Option<impl ChessPiece>;
+    fn get_piece(&self, square: S) -> Option<P>;
 
     /// Return iterator over all pieces on board
     ///
     /// No guaranteed order.
-    fn all_pieces(&self) -> impl Iterator<Item = impl ChessMove>;
+    fn all_pieces(&self) -> impl Iterator<Item = P>;
 
     /// Moves a piece on the chess board
     ///
@@ -81,7 +94,7 @@ pub trait ChessBoard {
     ///
     /// # Errors
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn move_piece(&mut self, chess_move: impl ChessMove) -> Result<(), ChessError>;
+    fn move_piece(&mut self, chess_move: M) -> Result<(), ChessError>;
 }
 
 /// Pseudo-legal move generator
@@ -90,17 +103,19 @@ pub trait ChessBoard {
 /// where a piece may move, but do not necessarily leave the board in a valid state after they are
 /// executed e.g. the king may be left in check. Associated functions generally much faster than
 /// [`LegalMoveGenerator`].
-pub trait PLegalMoveGenerator: ChessBoard {
+pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>:
+    ChessBoard<S, P, M>
+{
     /// Return all pseudo-legal moves from the current board state
     ///
     /// Will not check for leaving the king in check, if strict legality is necessary then use
     /// [`LegalMoveGenerator::all_legal_moves`].
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
-    fn all_plegal_moves(&self) -> Result<impl Iterator<Item = impl ChessMove>, ChessError>;
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
+    fn all_plegal_moves(&self) -> Result<impl Iterator<Item = M>, ChessError>;
 
     /// Return all pseudo-legal moves for the piece at `square`
     ///
@@ -108,14 +123,11 @@ pub trait PLegalMoveGenerator: ChessBoard {
     /// [`LegalMoveGenerator::piece_legal_moves`].
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
-    fn piece_plegal_moves(
-        &self,
-        square: impl ChessSquare,
-    ) -> Result<impl Iterator<Item = impl ChessMove>, ChessError>;
+    fn piece_plegal_moves(&self, square: S) -> Result<impl Iterator<Item = M>, ChessError>;
 
     /// Return true if move `chess_move` is pseudo-legal
     ///
@@ -123,11 +135,11 @@ pub trait PLegalMoveGenerator: ChessBoard {
     /// [`LegalMoveGenerator::is_move_legal`].
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn is_move_plegal(&self, chess_move: impl ChessMove) -> Result<bool, ChessError>;
+    fn is_move_plegal(&self, chess_move: M) -> Result<bool, ChessError>;
 
     /// Move piece if move is pseudo-legal, otherwise error
     ///
@@ -135,12 +147,12 @@ pub trait PLegalMoveGenerator: ChessBoard {
     /// [`LegalMoveGenerator::is_move_legal`].
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_plegal(&mut self, chess_move: impl ChessMove) -> Result<(), ChessError> {
+    fn move_piece_plegal(&mut self, chess_move: M) -> Result<(), ChessError> {
         if self.is_move_plegal(chess_move)? {
             self.move_piece(chess_move)
         } else {
@@ -153,45 +165,44 @@ pub trait PLegalMoveGenerator: ChessBoard {
 ///
 /// Capable of generating strictly legal moves e.g. moves that both fulfil pieces' individual
 /// movement requirements and do not leave the king in check.
-pub trait LegalMoveGenerator: PLegalMoveGenerator {
+pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>:
+    PLegalMoveGenerator<S, P, M>
+{
     /// Return all legal moves from the current board state
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
-    fn all_legal_moves(&self) -> Result<impl Iterator<Item = impl ChessMove>, ChessError>;
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
+    fn all_legal_moves(&self) -> Result<impl Iterator<Item = M>, ChessError>;
 
     /// Return all legal moves for the piece at `square`
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
-    fn piece_legal_moves(
-        &self,
-        square: impl ChessSquare,
-    ) -> Result<impl Iterator<Item = impl ChessMove>, ChessError>;
+    fn piece_legal_moves(&self, square: S) -> Result<impl Iterator<Item = M>, ChessError>;
 
     /// Return true if move `chess_move` is legal
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn is_move_legal(&self, chess_move: impl ChessMove) -> Result<bool, ChessError>;
+    fn is_move_legal(&self, chess_move: M) -> Result<bool, ChessError>;
 
     /// Move piece if move is legal, otherwise error
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_legal(&mut self, chess_move: impl ChessMove) -> Result<(), ChessError>{
+    fn move_piece_legal(&mut self, chess_move: M) -> Result<(), ChessError> {
         if self.is_move_legal(chess_move)? {
             self.move_piece(chess_move)
         } else {
@@ -202,8 +213,8 @@ pub trait LegalMoveGenerator: PLegalMoveGenerator {
     /// Get current board state
     ///
     /// # Errors
-    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for example if
-    ///   there are no pieces of the colour of the current turn or there is not one king of each
-    ///   colour on the board.
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
     fn state(&self) -> Result<BoardState, ChessError>;
 }

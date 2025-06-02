@@ -1,8 +1,10 @@
 //! Chess backend and engine library
 #![allow(dead_code)]
 
-pub mod error;
+pub mod board;
 pub mod enums;
+pub mod error;
+pub mod notation;
 pub mod traits;
 
 #[cfg(doctest)]

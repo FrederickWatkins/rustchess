@@ -14,4 +14,10 @@ pub enum ChessError {
 
     #[error("Illegal move {0}")]
     IllegalMove(String),
+
+    #[error("File must be between 0-7 inclusive, {0} > 7")]
+    InvalidFile(u8),
+
+    #[error("Rank must be between 0-7 inclusive, {0} > 7")]
+    InvalidRank(u8),
 }

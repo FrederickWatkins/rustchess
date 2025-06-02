@@ -2,13 +2,15 @@
 
 /// Colour of piece
 #[allow(missing_docs)] // Enum variants self explanatory
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PieceColour {
     Black,
-    White
+    White,
 }
 
 /// Type of piece
 #[allow(missing_docs)] // Enum variants self explanatory
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PieceKind {
     King,
     Queen,
@@ -19,6 +21,7 @@ pub enum PieceKind {
 }
 
 /// Basic states of board based on king safety
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BoardState {
     /// Normal play in game, no restrictions on moves
     Normal,
