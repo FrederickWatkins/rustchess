@@ -9,8 +9,8 @@ pub enum ChessError {
     #[error("Piece not found at {0:?}")]
     PieceNotFound(String),
 
-    #[error("Board in invalid state")]
-    InvalidBoard,
+    #[error("Board in invalid state, info: {0}")]
+    InvalidBoard(String),
 
     #[error("Illegal move {0}")]
     IllegalMove(String),

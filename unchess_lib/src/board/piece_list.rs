@@ -53,14 +53,8 @@ impl Add<SquareOffset> for ChessSquare {
     fn add(self, rhs: SquareOffset) -> Self::Output {
         let file = self.file as i8 + rhs.file;
         let rank = self.rank as i8 + rhs.rank;
-        assert!(
-            file >= 0,
-            "File cannot be offset to less than zero {file} < 0"
-        );
-        assert!(
-            rank >= 0,
-            "Rank cannot be offset to less than zero {rank} < 0"
-        );
+        assert!(file >= 0, "File cannot be offset to less than zero {file} < 0");
+        assert!(rank >= 0, "Rank cannot be offset to less than zero {rank} < 0");
         Self::new(file as u8, rank as u8)
     }
 }
@@ -69,10 +63,7 @@ impl Sub for ChessSquare {
     type Output = SquareOffset;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        SquareOffset::new(
-            self.file as i8 - rhs.file as i8,
-            self.rank as i8 - rhs.rank as i8,
-        )
+        SquareOffset::new(self.file as i8 - rhs.file as i8, self.rank as i8 - rhs.rank as i8)
     }
 }
 
@@ -82,14 +73,8 @@ impl ChessSquare {
     /// # Panics
     /// Panics if file and/or rank are not between 0-7 inclusive
     pub fn new(file: u8, rank: u8) -> Self {
-        assert!(
-            (0..8).contains(&file),
-            "File must be between 0-7 inclusive, {file} > 7"
-        );
-        assert!(
-            (0..8).contains(&rank),
-            "Rank must be between 0-7 inclusive, {file} > 7"
-        );
+        assert!((0..8).contains(&file), "File must be between 0-7 inclusive, {file} > 7");
+        assert!((0..8).contains(&rank), "Rank must be between 0-7 inclusive, {file} > 7");
         Self { file, rank }
     }
 }
@@ -152,15 +137,8 @@ impl ChessMove {
     /// # Panics
     /// Panics if source and destination are the same square
     pub fn new(src: ChessSquare, dest: ChessSquare, promote_to: Option<PieceKind>) -> Self {
-        assert_ne!(
-            src, dest,
-            "Chess move cannot originate and terminate at same square"
-        );
-        Self {
-            src,
-            dest,
-            promote_to,
-        }
+        assert_ne!(src, dest, "Chess move cannot originate and terminate at same square");
+        Self { src, dest, promote_to }
     }
 }
 
@@ -187,11 +165,7 @@ impl traits::ChessPiece for ChessPiece {
 impl ChessPiece {
     /// Chess piece
     pub fn new(square: ChessSquare, kind: PieceKind, colour: PieceColour) -> Self {
-        Self {
-            square,
-            kind,
-            colour,
-        }
+        Self { square, kind, colour }
     }
 
     /// The square the piece sits on
@@ -249,10 +223,8 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
     }
 
     fn move_piece(&mut self, chess_move: ChessMove) -> Result<(), ChessError> {
-        let taken_piece = self
-            .pieces
-            .iter()
-            .position(|piece| piece.square == chess_move.dest);
+        const PAWN_DOUBLE_PUSH: i8 = 2;
+        let taken_piece = self.pieces.iter().position(|piece| piece.square == chess_move.dest);
 
         let piece = self.get_piece_mut(chess_move.src)?;
         piece.move_piece(chess_move.dest);
@@ -260,25 +232,21 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
             piece.kind = promote_to;
         }
         let piece = piece.to_owned();
-
+        // Wait till after moving piece succeeds to take
         if let Some(taken_index) = taken_piece {
             self.pieces.remove(taken_index);
         }
 
         let offset = chess_move.dest - chess_move.src;
-        // Kingside castle
-        if piece.kind == PieceKind::King && offset.file == 2 {
-            let rook = self.get_piece_mut(chess_move.dest + SquareOffset::new(1, 0))?;
-            rook.move_piece(chess_move.dest + SquareOffset::new(-1, 0));
-        }
-        // Queenside castle
-        if piece.kind == PieceKind::King && offset.file == -3 {
-            let rook = self.get_piece_mut(chess_move.dest + SquareOffset::new(-1, 0))?;
-            rook.move_piece(chess_move.dest + SquareOffset::new(1, 0));
-        }
+        self.castle_rook(piece, offset)?;
 
-        // Double pawn push
-        if piece.kind == PieceKind::Pawn && offset.rank.abs() == 2 {
+        match self.en_passant {
+            Some(en_passant) if piece.kind == PieceKind::Pawn && chess_move.dest == en_passant => {
+                self.take_en_passant(piece, offset)?;
+            }
+            _ => (),
+        }
+        if piece.kind == PieceKind::Pawn && offset.rank.abs() == PAWN_DOUBLE_PUSH {
             self.en_passant = Some(chess_move.src + offset / 2);
         } else {
             self.en_passant = None;
@@ -291,10 +259,7 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
 
 impl ChessBoard {
     fn get_piece_mut(&mut self, square: ChessSquare) -> Result<&mut ChessPiece, ChessError> {
-        let mut pieces = self
-            .pieces
-            .iter_mut()
-            .filter(|piece| piece.square == square);
+        let mut pieces = self.pieces.iter_mut().filter(|piece| piece.square == square);
         let piece = pieces.next();
         assert!(
             pieces.next().is_none(),
@@ -305,5 +270,33 @@ impl ChessBoard {
         } else {
             Err(ChessError::PieceNotFound(format!("{square}")))
         }
+    }
+
+    /// Check if king move was a castle and if so move rook
+    fn castle_rook(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
+        const KINGSIDE_CASTLE: i8 = 2;
+        const QUEENSIDE_CASTLE: i8 = -3;
+        if piece.kind == PieceKind::King && offset.file == KINGSIDE_CASTLE {
+            let rook = self.get_piece_mut(piece.square + SquareOffset::new(1, 0))?;
+            rook.move_piece(piece.square + SquareOffset::new(-1, 0));
+        }
+        if piece.kind == PieceKind::King && offset.file == QUEENSIDE_CASTLE {
+            let rook = self.get_piece_mut(piece.square + SquareOffset::new(-1, 0))?;
+            rook.move_piece(piece.square + SquareOffset::new(1, 0));
+        }
+        Ok(())
+    }
+
+    fn take_en_passant(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
+        let taken_pawn_square = piece.square + SquareOffset::new(0, -offset.rank);
+        if let Some(taken_pawn) = self.pieces.iter().position(|piece| piece.square == taken_pawn_square) {
+            self.pieces.remove(taken_pawn);
+        } else {
+            return Err(ChessError::InvalidBoard(format!(
+                "En passant square present at {} but no pawn to take at {}",
+                piece.square, taken_pawn_square
+            )));
+        }
+        Ok(())
     }
 }
