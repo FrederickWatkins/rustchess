@@ -108,9 +108,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove> {
 /// where a piece may move, but do not necessarily leave the board in a valid state after they are
 /// executed e.g. the king may be left in check. Associated functions generally much faster than
 /// [`LegalMoveGenerator`].
-pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>:
-    ChessBoard<S, P, M>
-{
+pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: ChessBoard<S, P, M> {
     /// Return all pseudo-legal moves from the current board state
     ///
     /// Will not check for leaving the king in check, if strict legality is necessary then use
@@ -170,9 +168,7 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>:
 ///
 /// Capable of generating strictly legal moves e.g. moves that both fulfil pieces' individual
 /// movement requirements and do not leave the king in check.
-pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>:
-    PLegalMoveGenerator<S, P, M>
-{
+pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: PLegalMoveGenerator<S, P, M> {
     /// Return all legal moves from the current board state
     ///
     /// # Errors
