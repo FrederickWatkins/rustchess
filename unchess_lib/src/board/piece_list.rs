@@ -5,6 +5,9 @@
 //! slow.
 
 use std::fmt;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Sub;
 
 use crate::enums::PieceColour;
 use crate::enums::PieceKind;
@@ -44,6 +47,35 @@ impl fmt::Display for ChessSquare {
     }
 }
 
+impl Add<SquareOffset> for ChessSquare {
+    type Output = ChessSquare;
+
+    fn add(self, rhs: SquareOffset) -> Self::Output {
+        let file = self.file as i8 + rhs.file;
+        let rank = self.rank as i8 + rhs.rank;
+        assert!(
+            file >= 0,
+            "File cannot be offset to less than zero {file} < 0"
+        );
+        assert!(
+            rank >= 0,
+            "Rank cannot be offset to less than zero {rank} < 0"
+        );
+        Self::new(file as u8, rank as u8)
+    }
+}
+
+impl Sub for ChessSquare {
+    type Output = SquareOffset;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        SquareOffset::new(
+            self.file as i8 - rhs.file as i8,
+            self.rank as i8 - rhs.rank as i8,
+        )
+    }
+}
+
 impl ChessSquare {
     /// Chess square at `file` and `rank`
     ///
@@ -62,11 +94,36 @@ impl ChessSquare {
     }
 }
 
+/// Offset between two chess squares
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SquareOffset {
+    file: i8,
+    rank: i8,
+}
+
+impl Div<i8> for SquareOffset {
+    type Output = SquareOffset;
+
+    fn div(self, rhs: i8) -> Self::Output {
+        Self {
+            file: self.file / rhs,
+            rank: self.rank / rhs,
+        }
+    }
+}
+
+impl SquareOffset {
+    fn new(file: i8, rank: i8) -> Self {
+        Self { file, rank }
+    }
+}
+
 /// Chess move from src to dest
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChessMove {
     src: ChessSquare,
     dest: ChessSquare,
+    promote_to: Option<PieceKind>,
 }
 
 impl traits::ChessMove for ChessMove {
@@ -76,6 +133,10 @@ impl traits::ChessMove for ChessMove {
 
     fn dest(&self) -> impl traits::ChessSquare {
         self.dest
+    }
+
+    fn promote_to(&self) -> Option<PieceKind> {
+        self.promote_to
     }
 }
 
@@ -90,12 +151,16 @@ impl ChessMove {
     ///
     /// # Panics
     /// Panics if source and destination are the same square
-    pub fn new(src: ChessSquare, dest: ChessSquare) -> Self {
+    pub fn new(src: ChessSquare, dest: ChessSquare, promote_to: Option<PieceKind>) -> Self {
         assert_ne!(
             src, dest,
             "Chess move cannot originate and terminate at same square"
         );
-        Self { src, dest }
+        Self {
+            src,
+            dest,
+            promote_to,
+        }
     }
 }
 
@@ -165,14 +230,18 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
         todo!()
     }
 
-    fn get_piece(&self, square: ChessSquare) -> Option<ChessPiece> {
+    fn get_piece(&self, square: ChessSquare) -> Result<ChessPiece, ChessError> {
         let mut pieces = self.pieces.iter().filter(|&&piece| piece.square == square);
         let piece = pieces.next().copied();
         assert!(
             pieces.next().is_none(),
             "Two pieces on same square, board state invalid"
         );
-        piece
+        if let Some(p) = piece {
+            Ok(p)
+        } else {
+            Err(ChessError::PieceNotFound(format!("{square}")))
+        }
     }
 
     fn all_pieces(&self) -> impl Iterator<Item = ChessPiece> {
@@ -180,21 +249,61 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
     }
 
     fn move_piece(&mut self, chess_move: ChessMove) -> Result<(), ChessError> {
+        let taken_piece = self
+            .pieces
+            .iter()
+            .position(|piece| piece.square == chess_move.dest);
+
+        let piece = self.get_piece_mut(chess_move.src)?;
+        piece.move_piece(chess_move.dest);
+        if let Some(promote_to) = chess_move.promote_to {
+            piece.kind = promote_to;
+        }
+        let piece = piece.to_owned();
+
+        if let Some(taken_index) = taken_piece {
+            self.pieces.remove(taken_index);
+        }
+
+        let offset = chess_move.dest - chess_move.src;
+        // Kingside castle
+        if piece.kind == PieceKind::King && offset.file == 2 {
+            let rook = self.get_piece_mut(chess_move.dest + SquareOffset::new(1, 0))?;
+            rook.move_piece(chess_move.dest + SquareOffset::new(-1, 0));
+        }
+        // Queenside castle
+        if piece.kind == PieceKind::King && offset.file == -3 {
+            let rook = self.get_piece_mut(chess_move.dest + SquareOffset::new(-1, 0))?;
+            rook.move_piece(chess_move.dest + SquareOffset::new(1, 0));
+        }
+
+        // Double pawn push
+        if piece.kind == PieceKind::Pawn && offset.rank.abs() == 2 {
+            self.en_passant = Some(chess_move.src + offset / 2);
+        } else {
+            self.en_passant = None;
+        }
+
+        self.turn = !self.turn;
+        Ok(())
+    }
+}
+
+impl ChessBoard {
+    fn get_piece_mut(&mut self, square: ChessSquare) -> Result<&mut ChessPiece, ChessError> {
         let mut pieces = self
             .pieces
             .iter_mut()
-            .filter(|piece| piece.square == chess_move.src);
+            .filter(|piece| piece.square == square);
         let piece = pieces.next();
         assert!(
             pieces.next().is_none(),
             "Two pieces on same square, board state invalid"
         );
-        match piece {
-            Some(p) => {
-                p.move_piece(chess_move.dest);
-                Ok(())
-            }
-            None => Err(ChessError::PieceNotFound(format!("{}", chess_move.src))),
+        if let Some(p) = piece {
+            Ok(p)
+        } else {
+            Err(ChessError::PieceNotFound(format!("{square}")))
         }
     }
 }

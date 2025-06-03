@@ -40,6 +40,9 @@ pub trait ChessMove: Debug + Display + Copy {
 
     /// Destination square of the chess move
     fn dest(&self) -> impl ChessSquare;
+
+    /// Piece to promote to if pawn reaching end of board
+    fn promote_to(&self) -> Option<PieceKind>;
 }
 
 /// Generic piece
@@ -80,7 +83,9 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove> {
     /// Return piece at `square`
     ///
     /// Returns none if no piece present.
-    fn get_piece(&self, square: S) -> Option<P>;
+    /// # Errors
+    /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
+    fn get_piece(&self, square: S) -> Result<P, ChessError>;
 
     /// Return iterator over all pieces on board
     ///

@@ -1,11 +1,24 @@
 //! Module for enums common to all chess board representations
 
+use std::ops::Not;
+
 /// Colour of piece
 #[allow(missing_docs)] // Enum variants self explanatory
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PieceColour {
     Black,
     White,
+}
+
+impl Not for PieceColour {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            PieceColour::Black => PieceColour::White,
+            PieceColour::White => PieceColour::Black,
+        }
+    }
 }
 
 /// Type of piece
