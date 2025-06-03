@@ -33,6 +33,19 @@ pub enum PieceKind {
     Pawn,
 }
 
+impl From<PieceKind> for char {
+    fn from(value: PieceKind) -> Self {
+        match value {
+            PieceKind::King => 'K',
+            PieceKind::Queen => 'Q',
+            PieceKind::Bishop => 'B',
+            PieceKind::Knight => 'N',
+            PieceKind::Rook => 'R',
+            PieceKind::Pawn => 'P',
+        }
+    }
+}
+
 /// Basic states of board based on king safety
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BoardState {

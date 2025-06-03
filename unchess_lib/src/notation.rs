@@ -1,5 +1,6 @@
 //! Module for game notations like PGN and FEN
 
+use crate::enums::{PieceColour, PieceKind};
 use crate::error::ChessError;
 
 /// Convert u8 representation of file into char based on pgn standard
@@ -35,5 +36,13 @@ pub fn rank(rank: u8) -> Result<char, ChessError> {
         6 => Ok('7'),
         7 => Ok('8'),
         _ => Err(ChessError::InvalidRank(rank)),
+    }
+}
+
+/// Convert piece into FEN char (uppercase for white, lowercase for black)
+pub fn piece(colour: PieceColour, kind: PieceKind) -> char {
+    match colour {
+        PieceColour::Black => char::from(kind).to_ascii_lowercase(),
+        PieceColour::White => char::from(kind).to_ascii_uppercase(),
     }
 }

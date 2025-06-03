@@ -7,16 +7,14 @@
 //! when interacting with bitboards.
 use std::fmt::{Debug, Display};
 
-use crate::{
-    enums::{BoardState, PieceColour, PieceKind},
-    error::ChessError,
-};
+use crate::enums::{BoardState, PieceColour, PieceKind};
+use crate::error::ChessError;
 
 /// Generic chess square
 ///
 /// Can't be a transparent shared data type because of differences in internal board
 /// representations, so setters and getters must be used instead.
-pub trait ChessSquare: Debug + Display + Copy + Eq {
+pub trait ChessSquare: Debug + Display {
     /// File of the square
     ///
     /// Returns a value from 0-7 inclusive where 0 represents the a-file and 7 the h-file.
@@ -34,12 +32,12 @@ pub trait ChessSquare: Debug + Display + Copy + Eq {
 /// representations, so setters and getters must be used instead.
 ///
 /// For an ambiguous chess move datatype compatible with PGN notation, see TODO
-pub trait ChessMove: Debug + Display + Copy {
+pub trait ChessMove<S: ChessSquare>: Debug + Display {
     /// Source square of the chess move
-    fn src(&self) -> impl ChessSquare;
+    fn src(&self) -> S;
 
     /// Destination square of the chess move
-    fn dest(&self) -> impl ChessSquare;
+    fn dest(&self) -> S;
 
     /// Piece to promote to if pawn reaching end of board
     fn promote_to(&self) -> Option<PieceKind>;
@@ -49,7 +47,7 @@ pub trait ChessMove: Debug + Display + Copy {
 ///
 /// Does not include positions such as would be required for mailboxing since it would be
 /// unnecessary for bitboards.
-pub trait ChessPiece {
+pub trait ChessPiece: Debug + Display {
     /// The type of the piece
     fn kind(&self) -> PieceKind;
 
@@ -74,7 +72,7 @@ pub trait ChessPiece {
 ///
 /// Implies no ability to check the legality of moves or to ensure that the board is in a valid
 /// state, just the ability to store and manipulate internal state
-pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove> {
+pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
     /// Return the default starting chess board
     ///
     /// White's turn, all pieces in starting positions, with castling rights.
@@ -108,7 +106,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove> {
 /// where a piece may move, but do not necessarily leave the board in a valid state after they are
 /// executed e.g. the king may be left in check. Associated functions generally much faster than
 /// [`LegalMoveGenerator`].
-pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: ChessBoard<S, P, M> {
+pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 'static>: ChessBoard<S, P, M> {
     /// Return all pseudo-legal moves from the current board state
     ///
     /// Will not check for leaving the king in check, if strict legality is necessary then use
@@ -155,20 +153,16 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: Ches
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_plegal(&mut self, chess_move: M) -> Result<(), ChessError> {
-        if self.is_move_plegal(chess_move)? {
-            self.move_piece(chess_move)
-        } else {
-            Err(ChessError::IllegalMove(format!("{chess_move}")))
-        }
-    }
+    fn move_piece_plegal(&mut self, chess_move: M) -> Result<(), ChessError>;
 }
 
 /// Strict legal move generator
 ///
 /// Capable of generating strictly legal moves e.g. moves that both fulfil pieces' individual
 /// movement requirements and do not leave the king in check.
-pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: PLegalMoveGenerator<S, P, M> {
+pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 'static>:
+    PLegalMoveGenerator<S, P, M>
+{
     /// Return all legal moves from the current board state
     ///
     /// # Errors
@@ -203,13 +197,7 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove>: PLega
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_legal(&mut self, chess_move: M) -> Result<(), ChessError> {
-        if self.is_move_legal(chess_move)? {
-            self.move_piece(chess_move)
-        } else {
-            Err(ChessError::IllegalMove(format!("{chess_move}")))
-        }
-    }
+    fn move_piece_legal(&mut self, chess_move: M) -> Result<(), ChessError>;
 
     /// Get current board state
     ///

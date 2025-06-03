@@ -5,12 +5,9 @@
 //! slow.
 
 use std::fmt;
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Sub;
+use std::ops::{Add, Div, Sub};
 
-use crate::enums::PieceColour;
-use crate::enums::PieceKind;
+use crate::enums::{PieceColour, PieceKind};
 use crate::error::ChessError;
 use crate::notation;
 use crate::traits;
@@ -111,12 +108,12 @@ pub struct ChessMove {
     promote_to: Option<PieceKind>,
 }
 
-impl traits::ChessMove for ChessMove {
-    fn src(&self) -> impl traits::ChessSquare {
+impl traits::ChessMove<ChessSquare> for ChessMove {
+    fn src(&self) -> ChessSquare {
         self.src
     }
 
-    fn dest(&self) -> impl traits::ChessSquare {
+    fn dest(&self) -> ChessSquare {
         self.dest
     }
 
@@ -127,7 +124,12 @@ impl traits::ChessMove for ChessMove {
 
 impl fmt::Display for ChessMove {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.src, self.dest)
+        let mut outstr = format!("{}{}", self.src, self.dest);
+        if let Some(promotion) = self.promote_to {
+            outstr.push('=');
+            outstr.push(promotion.into());
+        }
+        write!(f, "{outstr}")
     }
 }
 
@@ -159,6 +161,12 @@ impl traits::ChessPiece for ChessPiece {
 
     fn colour(&self) -> PieceColour {
         self.colour
+    }
+}
+
+impl fmt::Display for ChessPiece {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", notation::piece(self.colour, self.kind))
     }
 }
 
@@ -214,7 +222,7 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
         if let Some(p) = piece {
             Ok(p)
         } else {
-            Err(ChessError::PieceNotFound(format!("{square}")))
+            Err(ChessError::PieceNotFound(Box::new(square)))
         }
     }
 
@@ -268,7 +276,7 @@ impl ChessBoard {
         if let Some(p) = piece {
             Ok(p)
         } else {
-            Err(ChessError::PieceNotFound(format!("{square}")))
+            Err(ChessError::PieceNotFound(Box::new(square)))
         }
     }
 
