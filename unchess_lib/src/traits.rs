@@ -5,16 +5,16 @@
 //! strong performance. For example, the [`ChessSquare`] trait is necessary since if the public API
 //! assumed that its internal representation was two integers, this would create massive overhead
 //! when interacting with bitboards.
-use std::fmt::{Debug, Display};
 
 use crate::enums::{BoardState, PieceColour, PieceKind};
 use crate::error::ChessError;
+use crate::notation;
 
 /// Generic chess square
 ///
 /// Can't be a transparent shared data type because of differences in internal board
 /// representations, so setters and getters must be used instead.
-pub trait ChessSquare: Debug + Display {
+pub trait ChessSquare {
     /// File of the square
     ///
     /// Returns a value from 0-7 inclusive where 0 represents the a-file and 7 the h-file.
@@ -24,6 +24,15 @@ pub trait ChessSquare: Debug + Display {
     ///
     /// Returns a value from 0-7 inclusive where 0 represents the 1st rank and 7 the 8th rank.
     fn rank(&self) -> u8;
+
+    /// Returns square in algebraic notation
+    fn as_str(&self) -> String {
+        format!(
+            "{}{}",
+            notation::file(self.file()).unwrap_or('#'),
+            notation::rank(self.rank()).unwrap_or('0')
+        )
+    }
 }
 
 /// Generic unambiguous chess move
@@ -32,7 +41,7 @@ pub trait ChessSquare: Debug + Display {
 /// representations, so setters and getters must be used instead.
 ///
 /// For an ambiguous chess move datatype compatible with PGN notation, see TODO
-pub trait ChessMove<S: ChessSquare>: Debug + Display {
+pub trait ChessMove<S: ChessSquare> {
     /// Source square of the chess move
     fn src(&self) -> S;
 
@@ -41,13 +50,18 @@ pub trait ChessMove<S: ChessSquare>: Debug + Display {
 
     /// Piece to promote to if pawn reaching end of board
     fn promote_to(&self) -> Option<PieceKind>;
+
+    /// Returns start and end position as string
+    fn as_str(&self) -> String {
+        format!("{}{}", self.src().as_str(), self.dest().as_str())
+    }
 }
 
 /// Generic piece
 ///
-/// Does not include positions such as would be required for mailboxing since it would be
+/// Does not include positions such as would be required for piece lists since it would be
 /// unnecessary for bitboards.
-pub trait ChessPiece: Debug + Display {
+pub trait ChessPiece {
     /// The type of the piece
     fn kind(&self) -> PieceKind;
 
@@ -64,6 +78,14 @@ pub trait ChessPiece: Debug + Display {
             PieceKind::Rook => 5,
             PieceKind::Bishop | PieceKind::Knight => 3,
             PieceKind::Pawn => 1,
+        }
+    }
+
+    /// Return char based on fen standard (Uppercase for white, lower for black)
+    fn as_fen(&self) -> char {
+        match self.colour() {
+            PieceColour::Black => char::from(self.kind()).to_ascii_lowercase(),
+            PieceColour::White => char::from(self.kind()).to_ascii_uppercase(),
         }
     }
 }

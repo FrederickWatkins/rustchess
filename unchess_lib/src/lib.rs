@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod board;
+pub mod default_types;
 pub mod enums;
 pub mod error;
 pub mod notation;

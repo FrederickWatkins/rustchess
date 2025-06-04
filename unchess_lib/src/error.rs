@@ -2,20 +2,20 @@
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::traits::{ChessMove, ChessSquare};
+use crate::default_types::{SimpleMove, SimpleSquare};
 
 #[derive(Error, Debug)]
 /// Errors common across library interfaces
 #[allow(missing_docs)] // Enum variants self documented by error messages
 pub enum ChessError {
     #[error("Piece not found at {0}")]
-    PieceNotFound(Box<dyn ChessSquare>),
+    PieceNotFound(SimpleSquare),
 
     #[error("Board in invalid state, info: {0}")]
     InvalidBoard(String),
 
-    #[error("Illegal move {0}")]
-    IllegalMove(Box<dyn ChessMove<dyn ChessSquare>>),
+    #[error("Illegal move {0:?}")]
+    IllegalMove(SimpleMove),
 
     #[error("File must be between 0-7 inclusive, {0} > 7")]
     InvalidFile(u8),
