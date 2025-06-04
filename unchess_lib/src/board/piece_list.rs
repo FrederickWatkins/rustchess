@@ -12,6 +12,7 @@ use crate::error::ChessError;
 use crate::notation;
 use crate::traits;
 
+use itertools::Itertools as _;
 use tracing::{Level, event};
 
 /// Chess square
@@ -71,7 +72,7 @@ impl ChessSquare {
     /// Panics if file and/or rank are not between 0-7 inclusive
     pub fn new(file: u8, rank: u8) -> Self {
         assert!((0..8).contains(&file), "File must be between 0-7 inclusive, {file} > 7");
-        assert!((0..8).contains(&rank), "Rank must be between 0-7 inclusive, {file} > 7");
+        assert!((0..8).contains(&rank), "Rank must be between 0-7 inclusive, {rank} > 7");
         Self { file, rank }
     }
 }
@@ -187,13 +188,7 @@ impl ChessPiece {
     /// indictive of a malfunction in the caller, since this is not a valid chess move.
     pub fn move_piece(&mut self, dest: ChessSquare) {
         if self.square == dest {
-            event!(
-                Level::WARN,
-                "Moved piece {:?} from {} to same square {}",
-                self,
-                self.square,
-                dest
-            );
+            event!(Level::WARN, "Moved piece {self:?} from {dest} to same square {dest}");
         }
         self.square = dest;
     }
@@ -213,16 +208,11 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
     }
 
     fn get_piece(&self, square: ChessSquare) -> Result<ChessPiece, ChessError> {
-        let mut pieces = self.pieces.iter().filter(|&&piece| piece.square == square);
-        let piece = pieces.next().copied();
-        assert!(
-            pieces.next().is_none(),
-            "Two pieces on same square, board state invalid"
-        );
-        if let Some(p) = piece {
-            Ok(p)
-        } else {
-            Err(ChessError::PieceNotFound(Box::new(square)))
+        let pieces = self.pieces.iter().filter(|&&piece| piece.square == square);
+        match pieces.at_most_one() {
+            Ok(Some(piece)) => Ok(*piece),
+            Ok(None) => Err(ChessError::PieceNotFound(Box::new(square))),
+            Err(_) => Err(ChessError::InvalidBoard(format!("Two pieces found at {square}"))),
         }
     }
 
@@ -248,12 +238,8 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
         let offset = chess_move.dest - chess_move.src;
         self.castle_rook(piece, offset)?;
 
-        match self.en_passant {
-            Some(en_passant) if piece.kind == PieceKind::Pawn && chess_move.dest == en_passant => {
-                self.take_en_passant(piece, offset)?;
-            }
-            _ => (),
-        }
+        self.take_en_passant(piece, offset)?;
+
         if piece.kind == PieceKind::Pawn && offset.rank.abs() == PAWN_DOUBLE_PUSH {
             self.en_passant = Some(chess_move.src + offset / 2);
         } else {
@@ -266,17 +252,13 @@ impl traits::ChessBoard<ChessSquare, ChessPiece, ChessMove> for ChessBoard {
 }
 
 impl ChessBoard {
+    /// Mutable reference to piece on `square`
     fn get_piece_mut(&mut self, square: ChessSquare) -> Result<&mut ChessPiece, ChessError> {
-        let mut pieces = self.pieces.iter_mut().filter(|piece| piece.square == square);
-        let piece = pieces.next();
-        assert!(
-            pieces.next().is_none(),
-            "Two pieces on same square, board state invalid"
-        );
-        if let Some(p) = piece {
-            Ok(p)
-        } else {
-            Err(ChessError::PieceNotFound(Box::new(square)))
+        let pieces = self.pieces.iter_mut().filter(|piece| piece.square == square).peekable();
+        match pieces.at_most_one() {
+            Ok(Some(piece)) => Ok(piece),
+            Ok(None) => Err(ChessError::PieceNotFound(Box::new(square))),
+            Err(_) => Err(ChessError::InvalidBoard(format!("Two pieces found at {square}"))),
         }
     }
 
@@ -295,16 +277,91 @@ impl ChessBoard {
         Ok(())
     }
 
+    /// Check if move was en passant and if so take other pawn
     fn take_en_passant(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
-        let taken_pawn_square = piece.square + SquareOffset::new(0, -offset.rank);
-        if let Some(taken_pawn) = self.pieces.iter().position(|piece| piece.square == taken_pawn_square) {
-            self.pieces.remove(taken_pawn);
-        } else {
-            return Err(ChessError::InvalidBoard(format!(
-                "En passant square present at {} but no pawn to take at {}",
-                piece.square, taken_pawn_square
-            )));
+        if let Some(taken_pawn_square) = self.en_passant_target(piece, offset) {
+            if let Some(taken_pawn) = self.pieces.iter().position(|piece| piece.square == taken_pawn_square) {
+                self.pieces.remove(taken_pawn);
+            } else {
+                return Err(ChessError::InvalidBoard(format!(
+                    "En passant square present at {} but no pawn to take at {}",
+                    piece.square, taken_pawn_square
+                )));
+            }
         }
         Ok(())
+    }
+
+    /// Check if move was en passant and if so return square of pawn to take
+    fn en_passant_target(&self, piece: ChessPiece, offset: SquareOffset) -> Option<ChessSquare> {
+        match self.en_passant {
+            Some(en_passant) if piece.kind == PieceKind::Pawn && piece.square == en_passant => {
+                Some(piece.square + SquareOffset::new(0, -offset.rank))
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::traits::ChessBoard as _;
+
+    use super::*;
+
+    #[test]
+    fn normal_square() {
+        let square = ChessSquare::new(5, 4);
+        assert_eq!(square.file, 5);
+        assert_eq!(square.rank, 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "Rank must be between 0-7 inclusive, 8 > 7")]
+    fn wrong_range_square() {
+        let _ = ChessSquare::new(3, 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "Chess move cannot originate and terminate at same square")]
+    fn duplicate_move() {
+        let _ = ChessMove::new(ChessSquare::new(3, 4), ChessSquare::new(3, 4), None);
+    }
+
+    #[test]
+    fn two_on_same_square() {
+        let square = ChessSquare::new(3, 2);
+        let board = ChessBoard {
+            pieces: vec![
+                ChessPiece::new(square, PieceKind::Knight, PieceColour::Black),
+                ChessPiece::new(square, PieceKind::Bishop, PieceColour::White),
+            ],
+            turn: PieceColour::White,
+            en_passant: None,
+            castling_rights: [false, false, false, false],
+        };
+        let e = board.get_piece(square).unwrap_err();
+        match e {
+            ChessError::InvalidBoard(s) => assert_eq!(s, format!("Two pieces found at {square}")),
+            _ => panic!("Wrong error type {e}"),
+        }
+    }
+
+    #[test]
+    fn none_on_square() {
+        let square = ChessSquare::new(3, 2);
+        let board = ChessBoard {
+            pieces: vec![
+            ],
+            turn: PieceColour::White,
+            en_passant: None,
+            castling_rights: [false, false, false, false],
+        };
+        let e = board.get_piece(square).unwrap_err();
+        match e {
+            ChessError::PieceNotFound(_) => (),
+            _ => panic!("Wrong error type {e}"),
+        }
     }
 }
