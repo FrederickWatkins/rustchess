@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::default_types::{SimpleMove, SimpleSquare};
+use crate::{default_types::{SimpleMove, SimpleSquare}, enums::BoardState};
 
 #[derive(Error, Debug)]
 /// Errors common across library interfaces
@@ -22,4 +22,10 @@ pub enum ChessError {
 
     #[error("Rank must be between 0-7 inclusive, {0} > 7")]
     InvalidRank(u8),
+
+    #[error("{0:?} is not an actionable move")]
+    NotAction(BoardState),
+
+    #[error("Invalid PGN: {0}")]
+    InvalidPGN(String),
 }

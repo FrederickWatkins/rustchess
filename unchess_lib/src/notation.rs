@@ -1,6 +1,6 @@
 //! Module for game notations like PGN and FEN
 
-use crate::error::ChessError;
+use crate::{enums::AmbiguousMove, error::ChessError, pgn};
 
 /// Convert u8 representation of file into char based on pgn standard
 ///
@@ -35,5 +35,17 @@ pub fn rank(rank: u8) -> Result<char, ChessError> {
         6 => Ok('7'),
         7 => Ok('8'),
         _ => Err(ChessError::InvalidRank(rank)),
+    }
+}
+
+/// Convert pgn file to vector of moves
+/// 
+/// # Errors
+/// - [`crate::error::ChessError::InvalidPGN`] if PGN can't be parsed
+pub fn pgn_to_moves(input: &str) -> Result<Vec<AmbiguousMove>, ChessError> {
+    if let Ok((_, (_, moves))) =  pgn::pgn(input) {
+        Ok(moves)
+    } else {
+        Err(ChessError::InvalidPGN(input.to_string()))
     }
 }

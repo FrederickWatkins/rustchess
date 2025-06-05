@@ -5,9 +5,9 @@ pub mod board;
 pub mod default_types;
 pub mod enums;
 pub mod error;
-pub mod fen;
+mod fen;
 pub mod notation;
-pub mod pgn;
+mod pgn;
 pub mod traits;
 
 #[cfg(doctest)]
