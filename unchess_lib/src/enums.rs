@@ -49,6 +49,22 @@ impl From<PieceKind> for char {
     }
 }
 
+impl TryFrom<char> for PieceKind {
+    type Error = ChessError;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            'K' => Ok(Self::King),
+            'Q' => Ok(Self::Queen),
+            'B' => Ok(Self::Bishop),
+            'N' => Ok(Self::Knight),
+            'R' => Ok(Self::Rook),
+            'P' => Ok(Self::Pawn),
+            _ => Err(ChessError::InvalidPGN(value.to_string()))
+        }
+    }
+}
+
 /// Basic states of board based on king safety
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BoardState {

@@ -1,19 +1,12 @@
 //! Parsing for PGN notation
 
 use nom::{
-    IResult, Parser as _,
-    branch::alt,
-    bytes::complete::{is_not, tag, take_until},
-    character::complete::{char, digit1, multispace0, multispace1, one_of},
-    combinator::{map_res, opt, value},
-    error::Error,
-    multi::{many0, many1},
-    sequence::{delimited, pair, separated_pair},
+    branch::alt, bytes::complete::{is_not, tag, take_until}, character::complete::{anychar, char, digit1, multispace0, multispace1, one_of}, combinator::{map_res, opt, value}, error::{self, Error}, multi::{many0, many1}, sequence::{delimited, pair, separated_pair}, IResult, Parser as _
 };
 
 use crate::{
     default_types::SimpleSquare,
-    enums::{AmbiguousMove, CastlingSide, MoveAction, PieceKind},
+    enums::{AmbiguousMove, CastlingSide, MoveAction, PieceKind}, error::ChessError,
 };
 
 fn rank(input: &str) -> IResult<&str, u8> {
@@ -94,15 +87,17 @@ fn disambiguated_move(input: &str) -> IResult<&str, DisambiguatedMove> {
     alt((move_with_disambiguation, move_no_disambiguation)).parse(input)
 }
 
+fn piece_kind(input: &str) -> IResult<&str, PieceKind> {
+    let (input, piece_kind) = anychar(input)?;
+    if let Ok(kind) = PieceKind::try_from(piece_kind) {
+        Ok((input, kind))
+    } else {
+        Err(nom::Err::Error(error::Error::new(input, error::ErrorKind::Char)))
+    }
+}
+
 fn piece(input: &str) -> IResult<&str, PieceKind> {
-    let (input, piece_kind) = opt(alt((
-        value(PieceKind::Bishop, char('B')),
-        value(PieceKind::King, char('K')),
-        value(PieceKind::Knight, char('N')),
-        value(PieceKind::Queen, char('Q')),
-        value(PieceKind::Rook, char('R')),
-    )))
-    .parse(input)?;
+    let (input, piece_kind) = opt(piece_kind).parse(input)?;
     Ok((input, piece_kind.unwrap_or(PieceKind::Pawn)))
 }
 
