@@ -29,8 +29,8 @@ pub trait ChessSquare {
     fn as_str(&self) -> String {
         format!(
             "{}{}",
-            notation::file(self.file()).unwrap_or('#'),
-            notation::rank(self.rank()).unwrap_or('0')
+            notation::file_to_char(self.file()).unwrap_or('#'),
+            notation::rank_to_char(self.rank()).unwrap_or('0')
         )
     }
 }

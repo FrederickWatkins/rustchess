@@ -2,7 +2,10 @@
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{default_types::{SimpleMove, SimpleSquare}, enums::BoardState};
+use crate::{
+    enums::BoardState,
+    simple_types::{SimpleMove, SimpleSquare},
+};
 
 #[derive(Error, Debug)]
 /// Errors common across library interfaces

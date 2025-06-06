@@ -3,7 +3,10 @@
 use core::fmt;
 use std::ops::Not;
 
-use crate::{default_types::SimpleSquare, error::ChessError, notation, pgn, traits::ChessSquare as _};
+#[cfg(test)]
+use proptest::prelude::Strategy;
+
+use crate::{error::ChessError, notation, parser, simple_types::SimpleSquare, traits::ChessSquare as _};
 
 /// Colour of piece
 #[allow(missing_docs)] // Enum variants self explanatory
@@ -21,6 +24,16 @@ impl Not for PieceColour {
             PieceColour::Black => PieceColour::White,
             PieceColour::White => PieceColour::Black,
         }
+    }
+}
+
+impl PieceColour {
+    /// Strategy for generating either colour
+    #[cfg(test)]
+    pub fn strategy() -> impl Strategy<Value = Self> {
+        use proptest::{prelude::Just, prop_oneof};
+
+        prop_oneof![Just(Self::Black), Just(Self::White)]
     }
 }
 
@@ -60,8 +73,37 @@ impl TryFrom<char> for PieceKind {
             'N' => Ok(Self::Knight),
             'R' => Ok(Self::Rook),
             'P' => Ok(Self::Pawn),
-            _ => Err(ChessError::InvalidPGN(value.to_string()))
+            _ => Err(ChessError::InvalidPGN(value.to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+impl PieceKind {
+    /// Strategy for all pieces
+    pub fn strategy() -> impl Strategy<Value = Self> {
+        use proptest::{prelude::Just, prop_oneof};
+
+        prop_oneof![
+            Just(PieceKind::Pawn),
+            Just(PieceKind::Rook),
+            Just(PieceKind::Knight),
+            Just(PieceKind::King),
+            Just(PieceKind::Queen,),
+            Just(PieceKind::Bishop)
+        ]
+    }
+
+    /// Strategy for promotable pieces
+    pub fn promotable_stategy() -> impl Strategy<Value = Self> {
+        use proptest::{prelude::Just, prop_oneof};
+
+        prop_oneof![
+            Just(PieceKind::Rook),
+            Just(PieceKind::Knight),
+            Just(PieceKind::Queen),
+            Just(PieceKind::Bishop)
+        ]
     }
 }
 
@@ -116,6 +158,16 @@ impl TryFrom<BoardState> for MoveAction {
     }
 }
 
+impl MoveAction {
+    /// Proptest strategy for move actions
+    #[cfg(test)]
+    pub fn strategy() -> impl Strategy<Value = Self> {
+        use proptest::{prelude::Just, prop_oneof};
+
+        prop_oneof![Just(MoveAction::Check), Just(MoveAction::Checkmate)]
+    }
+}
+
 /// Side to castle on
 #[allow(missing_docs)] // Enum variants self explanatory
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -131,6 +183,14 @@ impl CastlingSide {
             CastlingSide::QueenSide => "O-O-O",
             CastlingSide::KingSide => "O-O",
         }
+    }
+
+    /// Proptest test strategy
+    #[cfg(test)]
+    pub fn strategy() -> impl Strategy<Value = Self> {
+        use proptest::{prelude::Just, prop_oneof};
+
+        prop_oneof![Just(CastlingSide::KingSide), Just(CastlingSide::QueenSide)]
     }
 }
 
@@ -182,10 +242,10 @@ impl AmbiguousMove {
                     s.push(char::from(*piece_kind));
                 }
                 if let Some(f) = src_file {
-                    s.push(notation::file(*f).unwrap());
+                    s.push(notation::file_to_char(*f).unwrap());
                 }
                 if let Some(r) = src_rank {
-                    s.push(notation::rank(*r).unwrap());
+                    s.push(notation::rank_to_char(*r).unwrap());
                 }
                 if *takes {
                     s.push('x');
@@ -203,6 +263,32 @@ impl AmbiguousMove {
             AmbiguousMove::Castle { side } => side.as_str().to_string(),
         }
     }
+
+    /// Strategy for creating pgn style moves. Not guaranteed to be possible.
+    #[rustfmt::skip]
+    #[cfg(test)]
+    pub fn strategy() -> impl Strategy<Value = AmbiguousMove> {
+        use proptest::{option::of, prelude::any};
+
+        let piece_kind = PieceKind::strategy();
+        let src_file = of(any::<u8>().prop_filter("Valid range for file", |x| (0..=7).contains(x)));
+        let src_rank = of(any::<u8>().prop_filter("Valid range for rank", |x| (0..=7).contains(x)));
+        let castle = any::<bool>();
+        let castling_side = CastlingSide::strategy();
+        let takes = any::<bool>();
+        let dest = SimpleSquare::strategy();
+        let promote_to = of(PieceKind::promotable_stategy());
+        let action = of(MoveAction::strategy());
+        (castle, castling_side, piece_kind, src_file, src_rank, takes, dest, promote_to, action).prop_map(
+            |(castle,castling_side, piece_kind, src_file, src_rank, takes, dest, promote_to, action,)| {
+                if castle {
+                    AmbiguousMove::Castle { side: castling_side }
+                } else {
+                    AmbiguousMove::Normal {piece_kind, src_file, src_rank, takes, dest, promote_to, action }
+                }
+            }
+        )
+    }
 }
 
 impl fmt::Display for AmbiguousMove {
@@ -213,9 +299,9 @@ impl fmt::Display for AmbiguousMove {
 
 impl TryFrom<&str> for AmbiguousMove {
     type Error = ChessError;
-    
+
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Ok((_, chess_move)) = pgn::chess_move(value) {
+        if let Ok((_, chess_move)) = parser::pgn::chess_move(value) {
             Ok(chess_move)
         } else {
             Err(ChessError::InvalidPGN(value.to_string()))

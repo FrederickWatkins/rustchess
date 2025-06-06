@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 381dc658bf9be411899edc58e9a7ab864e8e79f2d543159640efc8cb20ee5ceb # shrinks to p = SimplePiece { kind: Pawn, colour: Black }
+cc 11ca715adacdf519e4fb04262ae4197f7f3495fd8660f2abbc09edb09820802c # shrinks to p = SimplePiece { kind: Knight, colour: Black }

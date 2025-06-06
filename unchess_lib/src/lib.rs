@@ -2,12 +2,11 @@
 #![allow(dead_code)]
 
 pub mod board;
-pub mod default_types;
 pub mod enums;
 pub mod error;
-mod fen;
 pub mod notation;
-mod pgn;
+mod parser;
+pub mod simple_types;
 pub mod traits;
 
 #[cfg(doctest)]

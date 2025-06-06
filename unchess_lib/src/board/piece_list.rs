@@ -7,9 +7,9 @@
 use core::fmt;
 use std::ops::{Add, Div, Sub};
 
-use crate::default_types::{SimpleMove, SimpleSquare};
 use crate::enums::{PieceColour, PieceKind};
 use crate::error::ChessError;
+use crate::simple_types::{SimpleMove, SimpleSquare};
 use crate::traits;
 use crate::traits::{ChessMove as _, ChessPiece as _, ChessSquare as _};
 

@@ -7,7 +7,6 @@ edition = "2024"
 itertools = "0.14.0"
 nom = "8.0.0"
 petgraph = "0.8.1"
-proptest = "1.6.0"
 rand = "0.9.1"
 rayon = "1.10.0"
 thiserror = "2.0.12"
@@ -15,6 +14,7 @@ tracing = "0.1.41"
 
 [dev-dependencies]
 criterion = "0.6.0"
+proptest = "1.6.0"
 
 [lints.rust]
 missing_docs = "warn"
@@ -45,7 +45,6 @@ format_collect = "warn"
 format_push_string = "warn"
 from_iter_instead_of_collect = "warn"
 if_not_else = "warn"
-indexing_slicing = "warn"
 inefficient_to_string = "warn"
 infinite_loop = "warn"
 inline_always = "warn"

@@ -7,3 +7,5 @@
 cc a6827058035576f491c57d265d9adef37ae8b900b8c00271376eca8523c6f052 # shrinks to file = 0, rank = 0
 cc df4cdd3d2087fe0a65a030b8c562102f9618a34ebe33e16fe3e8389f621b27b8 # shrinks to file = 0, rank = 8
 cc 8423ff4ce76fa40c28e67d0138a4e993e7e9855f010a43be31d8fbbaa483e492 # shrinks to file = 8, rank = 0
+cc 2d44e0f207fef2da868a50b759d453f195484208934ecac029fe10551e96751d # shrinks to takes = false, file = 6, rank = 0
+cc b53bda7772f7bd0f1298ac5c39fe1783d16068768e4255aea18aae161073caec # shrinks to amb_move = Normal { piece_kind: Pawn, src_file: None, src_rank: None, takes: false, dest: SimpleSquare { file: 6, rank: 0 }, promote_to: None, action: None }
