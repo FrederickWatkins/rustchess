@@ -168,7 +168,10 @@ pub fn pgn(input: &str) -> IResult<&str, (Vec<(&str, &str)>, Vec<AmbiguousMove>)
 
 #[cfg(test)]
 mod tests {
-    use crate::{enums::AmbiguousMove, traits::{ChessMove as _, ChessSquare as _}};
+    use crate::{
+        enums::AmbiguousMove,
+        traits::{ChessMove as _, ChessSquare as _},
+    };
 
     use super::*;
     use proptest::prelude::*;

@@ -57,7 +57,7 @@ pub trait ChessMove<S: ChessSquare> {
     /// Returns start and end position as string
     fn as_str(&self) -> String {
         let mut s = format!("{}{}", self.src().as_str(), self.dest().as_str());
-        if let Some(piece) =  self.promote_to() {
+        if let Some(piece) = self.promote_to() {
             write!(&mut s, "={}", char::from(piece)).unwrap();
         }
         s
