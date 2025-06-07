@@ -5,7 +5,7 @@
 //! slow.
 
 use core::fmt;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 use crate::enums::{PieceColour, PieceKind};
 use crate::error::ChessError;
@@ -15,7 +15,6 @@ use crate::traits::{ChessBoard as _, ChessMove as _, ChessPiece as _, ChessSquar
 use crate::{notation, traits};
 
 use itertools::Itertools as _;
-use tracing::{Level, event};
 
 /// Offset between two chess squares
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -53,6 +52,13 @@ impl SquareOffset {
     const fn new(file: i8, rank: i8) -> Self {
         Self { file, rank }
     }
+
+    fn would_overflow(&self, square: SimpleSquare) -> bool {
+        -self.file > square.file() as i8
+            || self.file > 7 - square.file() as i8
+            || -self.rank > square.rank() as i8
+            || self.rank > 7 - square.rank() as i8
+    }
 }
 
 impl Add<SquareOffset> for SimpleSquare {
@@ -64,6 +70,12 @@ impl Add<SquareOffset> for SimpleSquare {
         assert!(file >= 0, "File cannot be offset to less than zero {file} < 0");
         assert!(rank >= 0, "Rank cannot be offset to less than zero {rank} < 0");
         Self::new(file as u8, rank as u8)
+    }
+}
+
+impl AddAssign<SquareOffset> for SimpleSquare {
+    fn add_assign(&mut self, rhs: SquareOffset) {
+        *self = self.add(rhs);
     }
 }
 
@@ -129,9 +141,6 @@ impl ChessPiece {
     /// Moving a piece to the square it already sits on is defined and will succeed but is usually
     /// indictive of a malfunction in the caller, since this is not a valid chess move.
     pub fn move_piece(&mut self, dest: SimpleSquare) {
-        if self.square == dest {
-            event!(Level::WARN, "Moved piece {self:?} from {dest} to same square {dest}");
-        }
         self.square = dest;
     }
 }
@@ -251,12 +260,12 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
     fn piece_plegal_moves(&self, square: SimpleSquare) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let piece = self.get_piece(square)?;
         match piece.kind() {
-            PieceKind::King => Ok(self.offset_moves(&piece, &KING_PATTERN)),
-            PieceKind::Queen => Ok(self.traversal_moves(&piece, &QUEEN_DIRECTIONS)),
-            PieceKind::Bishop => Ok(self.traversal_moves(&piece, &QUEEN_DIRECTIONS[0..4])),
-            PieceKind::Knight => Ok(self.offset_moves(&piece, &KNIGHT_PATTERN)),
-            PieceKind::Rook => Ok(self.traversal_moves(&piece, &QUEEN_DIRECTIONS[4..8])),
-            PieceKind::Pawn => Ok(self.pawn_moves(&piece)),
+            PieceKind::King => self.offset_moves(&piece, &KING_PATTERN),
+            PieceKind::Queen => self.traversal_moves(&piece, &QUEEN_DIRECTIONS),
+            PieceKind::Bishop => self.traversal_moves(&piece, &QUEEN_DIRECTIONS[0..4]),
+            PieceKind::Knight => self.offset_moves(&piece, &KNIGHT_PATTERN),
+            PieceKind::Rook => self.traversal_moves(&piece, &QUEEN_DIRECTIONS[4..8]),
+            PieceKind::Pawn => self.pawn_moves(&piece),
         }
     }
 
@@ -333,7 +342,7 @@ impl ChessBoard {
         }
     }
 
-    fn pawn_moves(&self, piece: &ChessPiece) -> Vec<SimpleMove> {
+    fn pawn_moves(&self, piece: &ChessPiece) -> Result<Vec<SimpleMove>, ChessError> {
         let mut moves: Vec<SimpleMove> = vec![];
         let single_push = piece.square + SquareOffset::new(0, 1) * piece.colour;
         let double_push = piece.square + SquareOffset::new(0, 2) * piece.colour;
@@ -344,9 +353,9 @@ impl ChessBoard {
         if piece.square.file() < 7 {
             takes.push(piece.square + SquareOffset::new(1, 1) * piece.colour);
         }
-        if self.get_piece(single_push).is_err() {
+        if self.square_empty(single_push)? {
             moves.push(SimpleMove::new(piece.square, single_push, None));
-            if self.get_piece(double_push).is_err() && piece.is_starting_rank() {
+            if self.square_empty(double_push)? && piece.is_starting_rank() {
                 moves.push(SimpleMove::new(piece.square, double_push, None));
             }
         }
@@ -355,21 +364,62 @@ impl ChessBoard {
                 (None, Ok(other_piece)) if other_piece.colour != piece.colour => {
                     moves.push(SimpleMove::new(piece.square, take, None));
                 }
-                (Some(en_passant), Err(_)) if en_passant == take => {
+                (Some(en_passant), Err(ChessError::PieceNotFound(_))) if en_passant == take => {
                     moves.push(SimpleMove::new(piece.square, take, None));
                 }
-                (_, _) => (),
+                (_, Err(ChessError::PieceNotFound(_)) | Ok(_)) => (),
+                (_, Err(e)) => return Err(e),
             }
         }
-        moves
+        Ok(moves)
     }
 
-    fn traversal_moves(&self, piece: &ChessPiece, directions: &[SquareOffset]) -> Vec<SimpleMove> {
-        todo!()
+    fn traversal_moves(&self, piece: &ChessPiece, directions: &[SquareOffset]) -> Result<Vec<SimpleMove>, ChessError> {
+        let mut moves: Vec<SimpleMove> = vec![];
+        for direction in directions {
+            let mut curr_square = piece.square;
+            while !direction.would_overflow(curr_square) {
+                curr_square += *direction;
+                if self.square_takeable(piece, curr_square)? {
+                    moves.push(SimpleMove::new(piece.square, curr_square, None));
+                }
+                if !self.square_empty(curr_square)? {
+                    break;
+                }
+            }
+        }
+        Ok(moves)
     }
 
-    fn offset_moves(&self, piece: &ChessPiece, pattern: &[SquareOffset]) -> Vec<SimpleMove> {
-        todo!()
+    fn offset_moves(&self, piece: &ChessPiece, pattern: &[SquareOffset]) -> Result<Vec<SimpleMove>, ChessError> {
+        let mut moves: Vec<SimpleMove> = vec![];
+        for offset in pattern {
+            if offset.would_overflow(piece.square) {
+                continue;
+            }
+            let target_square = piece.square + *offset;
+            if self.square_takeable(piece, target_square)? {
+                moves.push(SimpleMove::new(piece.square, target_square, None));
+            }
+        }
+        Ok(moves)
+    }
+
+    fn square_empty(&self, square: SimpleSquare) -> Result<bool, ChessError> {
+        match self.get_piece(square) {
+            Ok(_) => Ok(false),
+            Err(ChessError::PieceNotFound(_)) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn square_takeable(&self, piece: &ChessPiece, square: SimpleSquare) -> Result<bool, ChessError> {
+        match self.get_piece(square) {
+            Ok(other_piece) if other_piece.colour != piece.colour => Ok(true),
+            Err(ChessError::PieceNotFound(_)) => Ok(true),
+            Ok(_) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     fn fmt_board(&self) -> String {
@@ -565,43 +615,43 @@ mod tests {
 
     #[test]
     fn rook_moves() {
-        todo!();
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/2R2P2/8/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
-            .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
+            .piece_plegal_moves(SimpleSquare::from_pgn_str("c5").unwrap())
             .unwrap()
             .into_iter()
             .collect();
         moves.sort();
-        let exp_moves = moves_from_strs(vec!["f5f6", "f5g6"]);
+        let exp_moves = moves_from_strs(vec!["c5b5", "c5a5", "c5d5", "c5e5", "c5c6", "c5c7", "c5c4", "c5c3"]);
         assert_eq!(moves, exp_moves)
     }
 
     #[test]
     fn queen_moves() {
-        todo!();
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5Q2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
             .unwrap()
             .into_iter()
             .collect();
         moves.sort();
-        let exp_moves = moves_from_strs(vec!["f5f6", "f5g6"]);
+        let exp_moves = moves_from_strs(vec![
+            "f5f6", "f5f7", "f5f4", "f5f3", "f5g5", "f5h5", "f5e5", "f5d5", "f5c5", "f5b5", "f5a5", "f5g6", "f5h7",
+            "f5g4", "f5h3", "f5e6", "f5d7", "f5e4", "f5d3",
+        ]);
         assert_eq!(moves, exp_moves)
     }
 
     #[test]
     fn king_moves() {
-        todo!();
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let board = ChessBoard::from_fen("rnbqkbnr/pppp1ppp/4p3/4KP2/8/8/PPPP1PPP/RNBQ1BNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
-            .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
+            .piece_plegal_moves(SimpleSquare::from_pgn_str("e5").unwrap())
             .unwrap()
             .into_iter()
             .collect();
         moves.sort();
-        let exp_moves = moves_from_strs(vec!["f5f6", "f5g6"]);
+        let exp_moves = moves_from_strs(vec!["e5e6", "e5f6", "e5d6", "e5d5", "e5d4", "e5e4", "e5f4"]);
         assert_eq!(moves, exp_moves)
     }
 }

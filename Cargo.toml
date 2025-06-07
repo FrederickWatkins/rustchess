@@ -3,7 +3,6 @@ resolver="3"
 members=["unchess_cli", "unchess_lib"]
 [workspace.dependencies]
 unchess-lib = {path = "unchess_lib"}
-unchess-cli = {path = "unchess_cli"}
 
 [profile.release]
 opt-level = 3
