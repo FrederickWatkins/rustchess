@@ -14,7 +14,7 @@ use nom::{
 use crate::{
     enums::{AmbiguousMove, CastlingSide, MoveAction, PieceKind},
     notation::{char_to_file, char_to_rank},
-    simple_types::SimpleSquare,
+    simple_types::{SimpleMove, SimpleSquare},
 };
 
 fn rank(input: &str) -> IResult<&str, u8> {
@@ -28,6 +28,13 @@ fn file(input: &str) -> IResult<&str, u8> {
 pub fn square(input: &str) -> IResult<&str, SimpleSquare> {
     let (input, (file, rank)) = (file, rank).parse(input)?;
     Ok((input, SimpleSquare::new(file, rank)))
+}
+
+pub fn unambiguous_move(input: &str) -> IResult<&str, SimpleMove> {
+    let (input, src) = square(input)?;
+    let (input, dest) = square(input)?;
+    let (input, promote_to) = opt(promotion).parse(input)?;
+    Ok((input, SimpleMove::new(src, dest, promote_to)))
 }
 
 fn dest(input: &str) -> IResult<&str, (bool, SimpleSquare)> {
@@ -161,7 +168,7 @@ pub fn pgn(input: &str) -> IResult<&str, (Vec<(&str, &str)>, Vec<AmbiguousMove>)
 
 #[cfg(test)]
 mod tests {
-    use crate::{enums::AmbiguousMove, traits::ChessSquare as _};
+    use crate::{enums::AmbiguousMove, traits::{ChessMove as _, ChessSquare as _}};
 
     use super::*;
     use proptest::prelude::*;
@@ -211,6 +218,11 @@ mod tests {
         #[test]
         fn all_ambiguous_moves(amb_move in AmbiguousMove::strategy()) {
             assert_eq!(chess_move(&amb_move.as_pgn_str()).unwrap(), ("", amb_move));
+        }
+
+        #[test]
+        fn all_unambiguous_moves(chess_move in SimpleMove::strategy()) {
+            assert_eq!(unambiguous_move(&chess_move.as_str()).unwrap(), ("", chess_move), "{}", &chess_move.as_str());
         }
     }
 }

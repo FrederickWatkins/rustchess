@@ -1,3 +1,6 @@
+use unchess_lib::{board::piece_list::ChessBoard, traits::ChessBoard as _};
+
 fn main() {
-    println!("Hello World!");
+    let board = ChessBoard::starting_board();
+    println!("{}", board);
 }

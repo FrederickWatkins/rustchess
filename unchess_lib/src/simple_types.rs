@@ -9,6 +9,8 @@ use proptest::prelude::Strategy;
 
 use crate::enums::PieceColour;
 use crate::enums::PieceKind;
+use crate::error::ChessError;
+use crate::parser::pgn;
 use crate::traits::ChessMove;
 use crate::traits::ChessPiece;
 use crate::traits::ChessSquare;
@@ -48,6 +50,18 @@ impl SimpleSquare {
         assert!((0..8).contains(&file), "File must be between 0-7 inclusive, {file} > 7");
         assert!((0..8).contains(&rank), "Rank must be between 0-7 inclusive, {rank} > 7");
         Self { file, rank }
+    }
+
+    /// Create square from PGN standard string
+    ///
+    /// # Errors
+    /// [`crate::error::ChessError::InvalidPGN`] if input is invalid
+    pub fn from_pgn_str(input: &str) -> Result<Self, ChessError> {
+        if let Ok(s) = pgn::square(input) {
+            Ok(s.1)
+        } else {
+            Err(ChessError::InvalidPGN(input.to_string()))
+        }
     }
 
     /// Strategy for valid squares
@@ -99,6 +113,38 @@ impl SimpleMove {
     pub fn new(src: SimpleSquare, dest: SimpleSquare, promote_to: Option<PieceKind>) -> Self {
         assert_ne!(src, dest, "Chess move cannot originate and terminate at same square");
         Self { src, dest, promote_to }
+    }
+
+    /// Create move from PGNish string, but unambiguous
+    ///
+    /// # Errors
+    /// [crate::error::ChessError::InvalidPGN] if `pgn` is invalid
+    pub fn from_pgn_str(pgn: &str) -> Result<Self, ChessError> {
+        if let Ok(m) = pgn::unambiguous_move(pgn) {
+            Ok(m.1)
+        } else {
+            Err(ChessError::InvalidPGN(pgn.to_string()))
+        }
+    }
+
+    /// Strategy for property testing moves
+    ///
+    /// NOTE: to avoid generating invalid moves to and from the same square, if they are generated
+    /// it replaces them with the move a1h8
+    #[cfg(test)]
+    pub fn strategy() -> impl Strategy<Value = Self> {
+        use proptest::option::of;
+
+        let src = SimpleSquare::strategy();
+        let dest = SimpleSquare::strategy();
+        let promote_to = of(PieceKind::promotable_stategy());
+        (src, dest, promote_to).prop_map(|(src, dest, promote_to)| {
+            if src != dest {
+                Self::new(src, dest, promote_to)
+            } else {
+                Self::from_pgn_str("a1h8").unwrap()
+            }
+        })
     }
 }
 
