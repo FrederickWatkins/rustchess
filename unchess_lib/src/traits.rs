@@ -9,6 +9,7 @@
 use crate::enums::{BoardState, PieceColour, PieceKind};
 use crate::error::ChessError;
 use crate::notation;
+use crate::parser::fen::{Fen, fen as fen_parser};
 
 /// Generic chess square
 ///
@@ -98,7 +99,30 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
     /// Return the default starting chess board
     ///
     /// White's turn, all pieces in starting positions, with castling rights.
-    fn starting_board() -> Self;
+    fn starting_board() -> Self
+    where
+        Self: Sized,
+    {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
+    }
+
+    /// Generate board from internal FEN representation
+    fn from_fen_internal(fen: Fen) -> Self;
+
+    /// Generate board from FEN standard string
+    ///
+    /// # Errors
+    /// [`crate::error::ChessError::InvalidFEN`] If FEN isn't valid syntax
+    fn from_fen(fen: &str) -> Result<Self, ChessError>
+    where
+        Self: Sized,
+    {
+        if let Ok(fen) = fen_parser(fen) {
+            Ok(Self::from_fen_internal(fen.1))
+        } else {
+            Err(ChessError::InvalidFEN(fen.to_string()))
+        }
+    }
 
     /// Return piece at `square`
     ///

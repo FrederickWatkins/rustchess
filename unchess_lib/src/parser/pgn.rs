@@ -25,7 +25,7 @@ fn file(input: &str) -> IResult<&str, u8> {
     map_res(one_of("abcdefgh"), char_to_file).parse(input)
 }
 
-fn square(input: &str) -> IResult<&str, SimpleSquare> {
+pub fn square(input: &str) -> IResult<&str, SimpleSquare> {
     let (input, (file, rank)) = (file, rank).parse(input)?;
     Ok((input, SimpleSquare::new(file, rank)))
 }

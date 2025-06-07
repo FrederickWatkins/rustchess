@@ -31,4 +31,7 @@ pub enum ChessError {
 
     #[error("Invalid PGN: {0}")]
     InvalidPGN(String),
+
+    #[error("Invalid FEN: {0}")]
+    InvalidFEN(String),
 }

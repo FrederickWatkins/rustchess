@@ -9,9 +9,10 @@ use std::ops::{Add, Div, Sub};
 
 use crate::enums::{PieceColour, PieceKind};
 use crate::error::ChessError;
+use crate::parser::fen::Fen;
 use crate::simple_types::{SimpleMove, SimpleSquare};
-use crate::traits;
-use crate::traits::{ChessMove as _, ChessPiece as _, ChessSquare as _};
+use crate::traits::{ChessBoard as _, ChessMove as _, ChessPiece as _, ChessSquare as _};
+use crate::{notation, traits};
 
 use itertools::Itertools as _;
 use tracing::{Level, event};
@@ -113,6 +114,7 @@ impl ChessPiece {
 }
 
 /// Piece list representation of chess board
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChessBoard {
     pieces: Vec<ChessPiece>,
     turn: PieceColour,
@@ -121,8 +123,26 @@ pub struct ChessBoard {
 }
 
 impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
-    fn starting_board() -> Self {
-        todo!()
+    fn from_fen_internal(fen: Fen) -> Self {
+        let mut pieces: Vec<ChessPiece> = vec![];
+        for (i, rank) in fen.layout.into_iter().enumerate() {
+            for (j, piece) in rank.into_iter().enumerate() {
+                if let Some(piece) = piece {
+                    pieces.push(ChessPiece::new(
+                        SimpleSquare::new(j as u8, 7 - i as u8),
+                        piece.kind(),
+                        piece.colour(),
+                    ));
+                }
+            }
+        }
+
+        Self {
+            pieces,
+            turn: fen.turn,
+            en_passant: fen.en_passant,
+            castling_rights: fen.castling_rights,
+        }
     }
 
     fn get_piece(&self, square: SimpleSquare) -> Result<ChessPiece, ChessError> {
@@ -223,6 +243,37 @@ impl ChessBoard {
             }
             _ => None,
         }
+    }
+
+    fn fmt_board(&self) -> String {
+        let mut outstr = String::with_capacity(172);
+        for i in (0..8).rev() {
+            outstr.push(notation::rank_to_char(i).unwrap());
+            for j in 0..8 {
+                outstr.push(' ');
+                if let Ok(piece) = self.get_piece(SimpleSquare::new(j, i)) {
+                    outstr.push(piece.as_fen());
+                } else if (i + j) % 2 == 1 {
+                    outstr.push('☐');
+                } else {
+                    outstr.push(' ');
+                }
+            }
+            outstr.push('\n');
+        }
+
+        outstr.push_str("  ");
+        for j in 0..8 {
+            outstr.push(notation::file_to_char(j).unwrap());
+            outstr.push(' ');
+        }
+        outstr
+    }
+}
+
+impl fmt::Display for ChessBoard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.fmt_board())
     }
 }
 

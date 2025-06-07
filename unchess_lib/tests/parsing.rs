@@ -23,14 +23,17 @@ fn byrne_fischer_1963() {
 #[test]
 fn fischer_benko_1963() {
     let moves = pgn_to_moves(FISCHER_BENKO_1963).unwrap();
-    assert_eq!(moves.len(), 41);}
+    assert_eq!(moves.len(), 41);
+}
 
 #[test]
 fn fischer_myagmarsuren_1967() {
     let moves = pgn_to_moves(FISCHER_MYAGMARSUREN_1967).unwrap();
-    assert_eq!(moves.len(), 61);}
+    assert_eq!(moves.len(), 61);
+}
 
 #[test]
 fn fischer_spassky_1972() {
     let moves = pgn_to_moves(FISCHER_SPASSKY_1972).unwrap();
-    assert_eq!(moves.len(), 81);}
+    assert_eq!(moves.len(), 81);
+}
