@@ -7,11 +7,13 @@
 use core::fmt;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
-use crate::enums::{PieceColour, PieceKind};
+use crate::enums::{BoardState, PieceColour, PieceKind};
 use crate::error::ChessError;
 use crate::parser::fen::Fen;
 use crate::simple_types::{SimpleMove, SimpleSquare};
-use crate::traits::{ChessBoard as _, ChessMove as _, ChessPiece as _, ChessSquare as _, PLegalMoveGenerator};
+use crate::traits::{
+    ChessBoard as _, ChessMove as _, ChessPiece as _, ChessSquare as _, LegalMoveGenerator, PLegalMoveGenerator,
+};
 use crate::{notation, traits};
 
 use itertools::Itertools as _;
@@ -261,7 +263,7 @@ const KING_PATTERN: [SquareOffset; 8] = QUEEN_DIRECTIONS;
 impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
     fn all_plegal_moves(&self) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let mut out: Vec<SimpleMove> = vec![];
-        for piece in &self.pieces {
+        for piece in self.pieces.iter().filter(|piece| piece.colour == self.turn) {
             match self.piece_plegal_moves(piece.square) {
                 Ok(moves) => out.extend(moves),
                 Err(e) => return Err(e),
@@ -295,6 +297,67 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
             Ok(())
         } else {
             Err(ChessError::IllegalMove(chess_move))
+        }
+    }
+}
+
+impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
+    fn all_legal_moves(&self) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
+        let mut moves: Vec<SimpleMove> = vec![];
+        for chess_move in self.all_plegal_moves()? {
+            let mut board = self.clone();
+            board.move_piece(chess_move)?;
+            if !board.king_in_check(self.turn)? {
+                moves.push(chess_move);
+            }
+        }
+        Ok(moves)
+    }
+
+    fn piece_legal_moves(&self, square: SimpleSquare) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
+        let mut moves: Vec<SimpleMove> = vec![];
+        for chess_move in self.piece_plegal_moves(square)? {
+            let mut board = self.clone();
+            board.move_piece(chess_move)?;
+            if !board.king_in_check(self.turn)? {
+                moves.push(chess_move);
+            }
+        }
+        Ok(moves)
+    }
+
+    fn is_move_legal(&self, chess_move: SimpleMove) -> Result<bool, ChessError> {
+        if self.is_move_plegal(chess_move)? {
+            let mut board = self.clone();
+            board.move_piece(chess_move)?;
+            if !board.king_in_check(self.turn)? {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn move_piece_legal(&mut self, chess_move: SimpleMove) -> Result<(), ChessError> {
+        if self.is_move_legal(chess_move)? {
+            self.move_piece(chess_move)?;
+            Ok(())
+        } else {
+            Err(ChessError::IllegalMove(chess_move))
+        }
+    }
+
+    fn state(&self) -> Result<BoardState, ChessError> {
+        match (
+            self.all_legal_moves()?.into_iter().try_len().unwrap(),
+            self.king_in_check(self.turn)?,
+        ) {
+            (0, true) => Ok(BoardState::Checkmate),
+            (0, false) => Ok(BoardState::Stalemate),
+            (_, true) => Ok(BoardState::Check),
+            _ => Ok(BoardState::Normal),
         }
     }
 }
@@ -358,7 +421,6 @@ impl ChessBoard {
     fn pawn_moves(&self, piece: &ChessPiece) -> Result<Vec<SimpleMove>, ChessError> {
         let mut moves: Vec<SimpleMove> = vec![];
         let single_push = piece.square + SquareOffset::new(0, 1) * piece.colour;
-        let double_push = piece.square + SquareOffset::new(0, 2) * piece.colour;
         let mut takes = vec![];
         if piece.square.file() > 0 {
             takes.push(piece.square + SquareOffset::new(-1, 1) * piece.colour);
@@ -368,8 +430,12 @@ impl ChessBoard {
         }
         if self.square_empty(single_push)? {
             moves.append(&mut piece.promotions_on_square(single_push));
-            if self.square_empty(double_push)? && piece.is_starting_rank() {
-                moves.push(SimpleMove::new(piece.square, double_push, None));
+            if piece.is_starting_rank() && self.square_empty(piece.square + SquareOffset::new(0, 2) * piece.colour)? {
+                moves.push(SimpleMove::new(
+                    piece.square,
+                    piece.square + SquareOffset::new(0, 2) * piece.colour,
+                    None,
+                ));
             }
         }
         for take in takes {
@@ -458,6 +524,77 @@ impl ChessBoard {
             outstr.push(' ');
         }
         outstr
+    }
+
+    fn king_in_check(&self, colour: PieceColour) -> Result<bool, ChessError> {
+        if let Ok(king) = self
+            .pieces
+            .iter()
+            .filter(|piece| piece.kind == PieceKind::King && piece.colour == colour)
+            .exactly_one()
+        {
+            self.piece_under_attack(king)
+        } else {
+            Err(ChessError::InvalidBoard(format!(
+                "Number of kings of colour {colour:?} on the board not equal to one"
+            )))
+        }
+    }
+
+    /// Checks if piece is under attack by pretending its other pieces and seeing if it can attack
+    ///
+    /// Symmetry is beautiful!
+    fn piece_under_attack(&self, piece: &ChessPiece) -> Result<bool, ChessError> {
+        use traits::ChessMove;
+        let mut attacked = self.piece_attacked_by(
+            piece,
+            self.traversal_moves(piece, &QUEEN_DIRECTIONS[0..4])?
+                .iter()
+                .map(ChessMove::dest),
+            &[PieceKind::Queen, PieceKind::Bishop],
+        )?;
+        attacked |= self.piece_attacked_by(
+            piece,
+            self.traversal_moves(piece, &QUEEN_DIRECTIONS[4..8])?
+                .iter()
+                .map(ChessMove::dest),
+            &[PieceKind::Queen, PieceKind::Rook],
+        )?;
+        attacked |= self.piece_attacked_by(
+            piece,
+            self.offset_moves(piece, &KNIGHT_PATTERN)?.iter().map(ChessMove::dest),
+            &[PieceKind::Knight],
+        )?;
+        attacked |= self.piece_attacked_by(
+            piece,
+            self.offset_moves(piece, &KING_PATTERN)?.iter().map(ChessMove::dest),
+            &[PieceKind::King],
+        )?;
+        attacked |= self.piece_attacked_by(
+            piece,
+            self.pawn_moves(piece)?.iter().map(ChessMove::dest),
+            &[PieceKind::Pawn],
+        )?;
+
+        Ok(attacked)
+    }
+
+    fn piece_attacked_by(
+        &self,
+        piece: &ChessPiece,
+        src_squares: impl Iterator<Item = SimpleSquare>,
+        piece_kinds: &[PieceKind],
+    ) -> Result<bool, ChessError> {
+        for square in src_squares {
+            match self.get_piece(square) {
+                Ok(ChessPiece { kind, colour, .. }) if colour != piece.colour && piece_kinds.contains(&kind) => {
+                    return Ok(true);
+                }
+                Err(ChessError::PieceNotFound(_)) | Ok(_) => (),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -666,5 +803,34 @@ mod tests {
         moves.sort();
         let exp_moves = moves_from_strs(vec!["e5e6", "e5f6", "e5d6", "e5d5", "e5d4", "e5e4", "e5f4"]);
         assert_eq!(moves, exp_moves)
+    }
+
+    #[test]
+    fn king_in_check() {
+        let board = ChessBoard::from_fen("k3r3/1P6/4K3/8/8/8/8/8 w KQkq - 0 2").unwrap();
+        assert_eq!(board.king_in_check(PieceColour::White).unwrap(), true);
+        assert_eq!(board.king_in_check(PieceColour::Black).unwrap(), true);
+        assert_eq!(board.state().unwrap(), BoardState::Check);
+    }
+
+    #[test]
+    fn king_not_in_check() {
+        let board = ChessBoard::from_fen("k3r3/8/1P6/3K4/8/8/8/8 w KQkq - 0 2").unwrap();
+        assert_eq!(board.king_in_check(PieceColour::White).unwrap(), false);
+        assert_eq!(board.king_in_check(PieceColour::Black).unwrap(), false);
+        assert_eq!(board.state().unwrap(), BoardState::Normal);
+    }
+
+    #[test]
+    fn pinned_piece() {
+        let board = ChessBoard::from_fen("k3r3/8/4N3/8/4K3/8/8/8 w KQkq - 0 2").unwrap();
+        assert!(
+            board
+                .piece_legal_moves(SimpleSquare::from_pgn_str("e6").unwrap())
+                .unwrap()
+                .into_iter()
+                .next()
+                .is_none()
+        )
     }
 }
