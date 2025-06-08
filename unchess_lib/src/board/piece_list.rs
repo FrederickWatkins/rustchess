@@ -136,6 +136,19 @@ impl ChessPiece {
         }
     }
 
+    fn promotions_on_square(&self, square: SimpleSquare) -> Vec<SimpleMove> {
+        if square.rank() == 0 || square.rank() == 7 {
+            vec![
+                SimpleMove::new(self.square, square, Some(PieceKind::Queen)),
+                SimpleMove::new(self.square, square, Some(PieceKind::Knight)),
+                SimpleMove::new(self.square, square, Some(PieceKind::Bishop)),
+                SimpleMove::new(self.square, square, Some(PieceKind::Rook)),
+            ]
+        } else {
+            vec![SimpleMove::new(self.square, square, None)]
+        }
+    }
+
     /// Move piece to `dest`
     ///
     /// Moving a piece to the square it already sits on is defined and will succeed but is usually
@@ -354,7 +367,7 @@ impl ChessBoard {
             takes.push(piece.square + SquareOffset::new(1, 1) * piece.colour);
         }
         if self.square_empty(single_push)? {
-            moves.push(SimpleMove::new(piece.square, single_push, None));
+            moves.append(&mut piece.promotions_on_square(single_push));
             if self.square_empty(double_push)? && piece.is_starting_rank() {
                 moves.push(SimpleMove::new(piece.square, double_push, None));
             }
@@ -362,7 +375,7 @@ impl ChessBoard {
         for take in takes {
             match (self.en_passant, self.get_piece(take)) {
                 (None, Ok(other_piece)) if other_piece.colour != piece.colour => {
-                    moves.push(SimpleMove::new(piece.square, take, None));
+                    moves.append(&mut piece.promotions_on_square(take));
                 }
                 (Some(en_passant), Err(ChessError::PieceNotFound(_))) if en_passant == take => {
                     moves.push(SimpleMove::new(piece.square, take, None));
