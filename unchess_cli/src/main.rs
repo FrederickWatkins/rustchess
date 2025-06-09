@@ -1,16 +1,12 @@
-use clap::{Arg, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgMatches, Command};
 use rustyline::{DefaultEditor, error::ReadlineError};
-use shlex;
 
 use unchess_lib::{board::piece_list::ChessBoard, error::ChessError, traits::ChessBoard as _};
 
 fn main() {
+    println!("{}", cli().try_get_matches_from(["help"]).unwrap_err());
     let mut repl = Repl::new();
-    loop {
-        if repl.process_input() {
-            break;
-        }
-    }
+    while !repl.process_input() {}
 }
 
 struct Repl {
@@ -37,7 +33,7 @@ impl Repl {
                         Err(e) => println!("{}", e),
                         _ => (),
                     },
-                    Err(e) => println!("{}", e.to_string()),
+                    Err(e) => println!("{}", e),
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -72,7 +68,7 @@ impl Repl {
 
     pub fn new_board(&mut self, fen: Option<&String>) -> Result<(), ChessError> {
         if let Some(fen) = fen {
-            self.board = ChessBoard::from_fen(&fen)?;
+            self.board = ChessBoard::from_fen(fen)?;
         } else {
             self.board = ChessBoard::starting_board();
         }
@@ -80,17 +76,17 @@ impl Repl {
         Ok(())
     }
 
-    pub fn move_piece(&mut self, chess_move: &String) -> Result<(), ChessError> {
+    pub fn move_piece(&mut self, chess_move: &str) -> Result<(), ChessError> {
         println!("Not yet implemented");
         Ok(())
     }
 
-    pub fn check_move(&self, chess_move: &String) -> Result<(), ChessError> {
+    pub fn check_move(&self, chess_move: &str) -> Result<(), ChessError> {
         println!("Not yet implemented");
         Ok(())
     }
 
-    pub fn get_moves(&self, square: &String) -> Result<(), ChessError> {
+    pub fn get_moves(&self, square: &str) -> Result<(), ChessError> {
         println!("Not yet implemented");
         Ok(())
     }
@@ -116,6 +112,7 @@ fn cli() -> Command {
     ";
 
     Command::new("unchess-cli")
+        .bin_name("chess-cli")
         .multicall(true)
         .arg_required_else_help(true)
         .subcommand_required(true)
@@ -170,5 +167,5 @@ fn cli() -> Command {
                 .help_template(SUBCOMMAND_TEMPLATE),
         )
         .author("Frederick Watkins")
-        .version(crate_version!())
+        .version(env!("UNCHESS_FULL_VERSION"))
 }
