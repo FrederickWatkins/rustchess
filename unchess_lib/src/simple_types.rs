@@ -64,6 +64,15 @@ impl SimpleSquare {
         }
     }
 
+    /// Check if square is starting rank for pawns of `colour`
+    pub fn is_starting_rank(&self, colour: PieceColour) -> bool {
+        match colour {
+            PieceColour::Black if self.rank() == 6 => true,
+            PieceColour::White if self.rank() == 1 => true,
+            _ => false,
+        }
+    }
+
     /// Strategy for valid squares
     #[cfg(test)]
     pub fn strategy() -> impl Strategy<Value = Self> {

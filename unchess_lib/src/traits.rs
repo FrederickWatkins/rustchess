@@ -136,6 +136,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
     /// Returns none if no piece present.
     /// # Errors
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
+    /// - [`crate::error::ChessError::InvalidBoard`] if board in invalid state
     fn get_piece(&self, square: S) -> Result<P, ChessError>;
 
     /// Return iterator over all pieces on board

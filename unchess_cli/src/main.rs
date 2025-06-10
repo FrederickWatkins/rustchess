@@ -67,6 +67,7 @@ impl Repl {
             "check" => self.check_move(command.1.get_one::<String>("PGN").unwrap())?,
             "get" => self.get_moves(command.1.get_one::<String>("SQUARE").unwrap())?,
             "show" => self.show_board(),
+            "print-fen" => println!("{}", self.board.as_fen_str()?),
             "quit" => return Ok(true),
             _ => unreachable!(),
         }
@@ -91,8 +92,11 @@ impl Repl {
     }
 
     pub fn check_move(&self, chess_move: &str) -> Result<(), ChessError> {
-        self.board.is_move_legal(self.board.disambiguate_move(chess_move)?)?;
-        println!("Move {} legal", chess_move);
+        if self.board.is_move_legal(self.board.disambiguate_move(chess_move)?)? {
+            println!("Move {} legal", chess_move);
+        } else {
+            println!("Illegal move {chess_move}");
+        }
         Ok(())
     }
 
@@ -227,6 +231,11 @@ fn cli() -> Command {
         .subcommand(
             Command::new("show")
                 .about("Show the current board state")
+                .help_template(SUBCOMMAND_TEMPLATE),
+        )
+        .subcommand(
+            Command::new("print-fen")
+                .about("Print the current board state in fen format")
                 .help_template(SUBCOMMAND_TEMPLATE),
         )
         .subcommand(
