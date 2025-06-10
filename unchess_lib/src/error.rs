@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use thiserror::Error;
 
 use crate::{
-    enums::BoardState,
+    enums::{AmbiguousMove, BoardState},
     simple_types::{SimpleMove, SimpleSquare},
 };
 
@@ -19,6 +19,12 @@ pub enum ChessError {
 
     #[error("Illegal move {0:?}")]
     IllegalMove(SimpleMove),
+
+    #[error("Impossible move {0}")]
+    ImpossibleMove(AmbiguousMove),
+
+    #[error("Ambiguous move not adequately defined {0}")]
+    AmbiguousMove(AmbiguousMove),
 
     #[error("File must be between 0-7 inclusive, {0} > 7")]
     InvalidFile(u8),

@@ -8,10 +8,11 @@
 
 use std::fmt::Write as _;
 
-use crate::enums::{BoardState, PieceColour, PieceKind};
+use crate::enums::{AmbiguousMove, BoardState, PieceColour, PieceKind};
 use crate::error::ChessError;
 use crate::notation;
 use crate::parser::fen::{Fen, fen as fen_parser};
+use crate::parser::pgn::chess_move as chess_move_parser;
 
 /// Generic chess square
 ///
@@ -258,4 +259,30 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
     fn state(&self) -> Result<BoardState, ChessError>;
+
+    /// Disambiguate AmbiguousMove type
+    ///
+    /// # Errors
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
+    /// - [`crate::error::ChessError::ImpossibleMove`] if no moves match the given move
+    /// - [`crate::error::ChessError::AmbiguousMove`] if multiple moves match the given move
+    fn disambiguate_move_internal(&self, chess_move: AmbiguousMove) -> Result<M, ChessError>;
+
+    /// Disambiguate move from pgn str format
+    ///
+    /// # Errors
+    /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
+    ///   example if there are no pieces of the colour of the current turn or there is not one king
+    ///   of each colour on the board.
+    /// - [`crate::error::ChessError::ImpossibleMove`] if no moves match the given move
+    /// - [`crate::error::ChessError::AmbiguousMove`] if multiple moves match the given move
+    fn disambiguate_move(&self, pgn: &str) -> Result<M, ChessError> {
+        if let Ok((_, chess_move)) = chess_move_parser(pgn) {
+            self.disambiguate_move_internal(chess_move)
+        } else {
+            Err(ChessError::InvalidPGN(pgn.to_string()))
+        }
+    }
 }

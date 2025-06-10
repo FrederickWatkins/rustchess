@@ -1,7 +1,14 @@
 use clap::{Arg, ArgMatches, Command};
+use colored::*;
 use rustyline::{DefaultEditor, error::ReadlineError};
 
-use unchess_lib::{board::piece_list::ChessBoard, error::ChessError, traits::ChessBoard as _};
+use unchess_lib::{
+    board::piece_list::ChessBoard,
+    error::ChessError,
+    notation,
+    simple_types::SimpleSquare,
+    traits::{ChessBoard as _, ChessMove, ChessPiece as _, ChessSquare as _, LegalMoveGenerator},
+};
 
 fn main() {
     println!("{}", cli().try_get_matches_from(["help"]).unwrap_err());
@@ -77,17 +84,79 @@ impl Repl {
     }
 
     pub fn move_piece(&mut self, chess_move: &str) -> Result<(), ChessError> {
-        println!("Not yet implemented");
+        self.board.move_piece(self.board.disambiguate_move(chess_move)?)?;
+        self.show_board();
+        self.board_state()?;
         Ok(())
     }
 
     pub fn check_move(&self, chess_move: &str) -> Result<(), ChessError> {
-        println!("Not yet implemented");
+        self.board.is_move_legal(self.board.disambiguate_move(chess_move)?)?;
+        println!("Move {} legal", chess_move);
         Ok(())
     }
 
     pub fn get_moves(&self, square: &str) -> Result<(), ChessError> {
-        println!("Not yet implemented");
+        let square = SimpleSquare::from_pgn_str(square)?;
+        let dest_squares: Vec<SimpleSquare> = self
+            .board
+            .piece_legal_moves(square)?
+            .into_iter()
+            .map(|chess_move| chess_move.dest())
+            .collect();
+        for i in (0..8).rev() {
+            print!("{}", notation::rank_to_char(i).unwrap());
+            for j in 0..8 {
+                print!(" ");
+                self.print_square(&dest_squares, square, SimpleSquare::new(j, i))?;
+            }
+            println!();
+        }
+
+        print!("  ");
+        for j in 0..8 {
+            print!("{}", notation::file_to_char(j).unwrap());
+            print!(" ");
+        }
+        println!();
+        Ok(())
+    }
+
+    fn print_square(
+        &self,
+        dest_squares: &[SimpleSquare],
+        src_square: SimpleSquare,
+        curr_square: SimpleSquare,
+    ) -> Result<(), ChessError> {
+        match self.board.get_piece(curr_square) {
+            Ok(piece) if dest_squares.contains(&piece.square()) => {
+                print!("{}", piece.as_fen().to_string().on_blue().red())
+            }
+            Ok(piece) if piece.square() == src_square => print!("{}", piece.as_fen().to_string().magenta().bold()),
+            Ok(piece) => print!("{}", piece),
+            Err(ChessError::PieceNotFound(_)) => {
+                let mut s = ' ';
+                if (curr_square.rank() + curr_square.file()) % 2 == 1 {
+                    s = '◼';
+                }
+                if dest_squares.contains(&curr_square) {
+                    print!("{}", s.to_string().on_blue());
+                } else {
+                    print!("{}", s);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+        Ok(())
+    }
+
+    pub fn board_state(&self) -> Result<(), ChessError> {
+        match self.board.state()? {
+            unchess_lib::enums::BoardState::Normal => (),
+            unchess_lib::enums::BoardState::Check => println!("{}", "Check!".magenta().bold()),
+            unchess_lib::enums::BoardState::Stalemate => println!("{}", "Stalemate!".bold()),
+            unchess_lib::enums::BoardState::Checkmate => println!("{}", "Checkmate!".red().bold()),
+        }
         Ok(())
     }
 

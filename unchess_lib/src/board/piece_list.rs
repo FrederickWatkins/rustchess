@@ -7,7 +7,7 @@
 use core::fmt;
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
-use crate::enums::{BoardState, PieceColour, PieceKind};
+use crate::enums::{AmbiguousMove, BoardState, CastlingSide, PieceColour, PieceKind};
 use crate::error::ChessError;
 use crate::parser::fen::Fen;
 use crate::simple_types::{SimpleMove, SimpleSquare};
@@ -274,8 +274,11 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
 
     fn piece_plegal_moves(&self, square: SimpleSquare) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let piece = self.get_piece(square)?;
+        if piece.colour != self.turn {
+            return Ok(vec![]);
+        }
         match piece.kind() {
-            PieceKind::King => self.offset_moves(&piece, &KING_PATTERN),
+            PieceKind::King => self.offset_moves(&piece, &KING_PATTERN), // TODO implement castling
             PieceKind::Queen => self.traversal_moves(&piece, &QUEEN_DIRECTIONS),
             PieceKind::Bishop => self.traversal_moves(&piece, &QUEEN_DIRECTIONS[0..4]),
             PieceKind::Knight => self.offset_moves(&piece, &KNIGHT_PATTERN),
@@ -360,6 +363,13 @@ impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
             _ => Ok(BoardState::Normal),
         }
     }
+
+    fn disambiguate_move_internal(&self, chess_move: AmbiguousMove) -> Result<SimpleMove, ChessError> {
+        match chess_move {
+            AmbiguousMove::Normal { .. } => self.disambiguate_normal(chess_move),
+            AmbiguousMove::Castle { .. } => Ok(self.disambiguate_castling(chess_move)),
+        }
+    }
 }
 
 impl ChessBoard {
@@ -380,7 +390,7 @@ impl ChessBoard {
     /// Check if king move was a castle and if so move rook
     fn castle_rook(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
         const KINGSIDE_CASTLE: i8 = 2;
-        const QUEENSIDE_CASTLE: i8 = -3;
+        const QUEENSIDE_CASTLE: i8 = -2;
         if piece.kind() == PieceKind::King && offset.file == KINGSIDE_CASTLE {
             let rook = self.get_piece_mut(piece.square() + SquareOffset::new(1, 0))?;
             rook.move_piece(piece.square() + SquareOffset::new(-1, 0));
@@ -440,7 +450,7 @@ impl ChessBoard {
         }
         for take in takes {
             match (self.en_passant, self.get_piece(take)) {
-                (None, Ok(other_piece)) if other_piece.colour != piece.colour => {
+                (_, Ok(other_piece)) if other_piece.colour != piece.colour => {
                     moves.append(&mut piece.promotions_on_square(take));
                 }
                 (Some(en_passant), Err(ChessError::PieceNotFound(_))) if en_passant == take => {
@@ -510,7 +520,7 @@ impl ChessBoard {
                 if let Ok(piece) = self.get_piece(SimpleSquare::new(j, i)) {
                     outstr.push(piece.as_fen());
                 } else if (i + j) % 2 == 1 {
-                    outstr.push('☐');
+                    outstr.push('◼');
                 } else {
                     outstr.push(' ');
                 }
@@ -595,6 +605,70 @@ impl ChessBoard {
             }
         }
         Ok(false)
+    }
+
+    fn disambiguate_normal(&self, chess_move: AmbiguousMove) -> Result<SimpleMove, ChessError> {
+        let (piece_kind, src_file, src_rank, takes, dest, promote_to, action) = match chess_move {
+            AmbiguousMove::Normal {
+                piece_kind,
+                src_file,
+                src_rank,
+                takes,
+                dest,
+                promote_to,
+                action,
+            } => (piece_kind, src_file, src_rank, takes, dest, promote_to, action),
+            AmbiguousMove::Castle { .. } => panic!("Can't use normal move disambiguator on castle"),
+        };
+        let all_moves: Vec<SimpleMove> = self
+            .all_legal_moves()?
+            .into_iter()
+            .filter(|unambiguous_move| {
+                let mut is_match = true;
+                is_match &= self.get_piece(unambiguous_move.src()).unwrap().kind() == piece_kind;
+                if let Some(file) = src_file {
+                    is_match &= unambiguous_move.src().file() == file;
+                }
+                if let Some(rank) = src_rank {
+                    is_match &= unambiguous_move.src().rank() == rank;
+                }
+                if takes {
+                    is_match &= self.get_piece(unambiguous_move.dest()).is_ok();
+                }
+                is_match &= unambiguous_move.dest() == dest;
+                is_match &= unambiguous_move.promote_to() == promote_to;
+                if let Some(action) = action {
+                    let mut board = self.clone();
+                    board.move_piece(*unambiguous_move).unwrap();
+                    is_match &= board.state().unwrap() == action.into();
+                }
+                is_match
+            })
+            .collect();
+        match all_moves.len() {
+            0 => Err(ChessError::ImpossibleMove(chess_move)),
+            1 => Ok(all_moves[0]),
+            _ => Err(ChessError::AmbiguousMove(chess_move)),
+        }
+    }
+
+    fn disambiguate_castling(&self, chess_move: AmbiguousMove) -> SimpleMove {
+        let side = match chess_move {
+            AmbiguousMove::Normal { .. } => panic!("Can't use castling move disambiguator on normal move"),
+            AmbiguousMove::Castle { side } => side,
+        };
+        let mut rank = 0;
+        let mut file = 6;
+        let mut src = SimpleSquare::new(4, 0);
+        if side == CastlingSide::QueenSide {
+            file = 2;
+        }
+        if self.turn == PieceColour::Black {
+            rank = 7;
+            src = SimpleSquare::new(4, 7);
+        }
+
+        SimpleMove::new(src, SimpleSquare::new(file, rank), None)
     }
 }
 
@@ -724,6 +798,19 @@ mod tests {
     }
 
     #[test]
+    fn pawn_takes_en_passant_behind() {
+        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e3 0 2").unwrap();
+        let mut moves: Vec<SimpleMove> = board
+            .piece_plegal_moves(SimpleSquare::from_pgn_str("e4").unwrap())
+            .unwrap()
+            .into_iter()
+            .collect();
+        moves.sort();
+        let exp_moves = moves_from_strs(vec!["e4e5", "e4d5"]);
+        assert_eq!(moves, exp_moves)
+    }
+
+    #[test]
     fn en_passant() {
         let mut board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
         board.move_piece(SimpleMove::from_pgn_str("g7g5").unwrap()).unwrap();
@@ -778,7 +865,7 @@ mod tests {
 
     #[test]
     fn queen_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5Q2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5Q2/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
             .unwrap()

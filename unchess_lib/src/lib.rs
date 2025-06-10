@@ -1,5 +1,4 @@
 //! Chess backend and engine library
-#![allow(dead_code)]
 
 pub mod board;
 pub mod enums;
