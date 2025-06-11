@@ -173,6 +173,8 @@ pub struct ChessBoard {
     turn: PieceColour,
     en_passant: Option<SimpleSquare>,
     castling_rights: [bool; 4],
+    halfmove_clock: u32,
+    fullmove_number: u32,
 }
 
 impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
@@ -196,6 +198,8 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
             turn: fen.turn,
             en_passant: fen.en_passant,
             castling_rights: fen.castling_rights,
+            halfmove_clock: fen.halfmove_clock,
+            fullmove_number: fen.fullmove_number,
         }
     }
 
@@ -216,6 +220,8 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         const PAWN_DOUBLE_PUSH: i8 = 2;
         let taken_piece = self.pieces.iter().position(|piece| piece.square() == chess_move.dest());
 
+        self.halfmove_clock += 1;
+
         let piece = self.get_piece_mut(chess_move.src())?;
         piece.move_piece(chess_move.dest());
         if let Some(promote_to) = chess_move.promote_to() {
@@ -225,6 +231,11 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         // Wait till after moving piece succeeds to take
         if let Some(taken_index) = taken_piece {
             self.pieces.remove(taken_index);
+            self.halfmove_clock = 0;
+        }
+
+        if piece.kind() == PieceKind::Pawn {
+            self.halfmove_clock = 0;
         }
 
         let offset = chess_move.dest() - chess_move.src();
@@ -237,10 +248,12 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         } else {
             self.en_passant = None;
         }
-
         self.update_castling_rights(piece, chess_move);
 
         self.turn = !self.turn;
+        if self.turn == PieceColour::White {
+            self.fullmove_number += 1;
+        }
         Ok(())
     }
 }
@@ -283,7 +296,7 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
 
     fn piece_plegal_moves(&self, square: SimpleSquare) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let piece = self.get_piece(square)?;
-        if piece.colour != self.turn {
+        if piece.colour != self.turn || self.halfmove_clock >= 50 {
             return Ok(vec![]);
         }
         match piece.kind() {
@@ -800,17 +813,14 @@ impl TryFrom<&ChessBoard> for Fen {
             turn: value.turn,
             castling_rights: value.castling_rights,
             en_passant: value.en_passant,
-            halfmove_clock: 0, // Until board implements 50 move rule
-            fullmove_number: 1,
+            halfmove_clock: value.halfmove_clock, // Until board implements 50 move rule
+            fullmove_number: value.fullmove_number,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-
-    use crate::traits::ChessBoard as _;
-
     use super::*;
 
     fn moves_from_strs(moves: Vec<&str>) -> Vec<SimpleMove> {
@@ -849,6 +859,8 @@ mod tests {
             turn: PieceColour::White,
             en_passant: None,
             castling_rights: [false, false, false, false],
+            halfmove_clock: 0,
+            fullmove_number: 1,
         };
         let e = board.get_piece(square).unwrap_err();
         match e {
@@ -865,6 +877,8 @@ mod tests {
             turn: PieceColour::White,
             en_passant: None,
             castling_rights: [false, false, false, false],
+            halfmove_clock: 0,
+            fullmove_number: 1,
         };
         let e = board.get_piece(square).unwrap_err();
         match e {
@@ -1095,5 +1109,36 @@ mod tests {
         assert_eq!(board.castling_rights, [false, true, true, true]);
         board.move_piece(SimpleMove::from_pgn_str("h8g8").unwrap()).unwrap();
         assert_eq!(board.castling_rights, [false, true, false, true]);
+    }
+
+    #[test]
+    fn fifty_move_draw() {
+        let mut board = ChessBoard::starting_board();
+        for _ in 0..12 {
+            board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f6g8").unwrap()).unwrap();
+        }
+        board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
+        board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
+        println!("{}", board.halfmove_clock);
+        assert_eq!(board.state().unwrap(), BoardState::Stalemate);
+    }
+
+    #[test]
+    fn fifty_move_not_draw() {
+        let mut board = ChessBoard::starting_board();
+        for _ in 0..12 {
+            board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f6g8").unwrap()).unwrap();
+        }
+        board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
+        board.move_piece(SimpleMove::from_pgn_str("e7e5").unwrap()).unwrap();
+        board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
+        println!("{}", board.halfmove_clock);
+        assert_eq!(board.state().unwrap(), BoardState::Normal);
     }
 }
