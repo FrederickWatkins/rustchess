@@ -803,6 +803,7 @@ impl ChessBoard {
     /// Hash current board state
     ///
     /// Includes piece positions, current turn, castling rights and en-passant
+    /// TODO fix perf problem
     pub fn hash_board_state(&self) -> u64 {
         let mut pieces = self.pieces.clone();
         pieces.sort_unstable();
@@ -851,7 +852,7 @@ mod tests {
     use super::*;
 
     fn moves_from_strs(moves: Vec<&str>) -> Vec<SimpleMove> {
-        let mut new_moves: Vec<SimpleMove> = moves.iter().map(|s| SimpleMove::from_pgn_str(s).unwrap()).collect();
+        let mut new_moves: Vec<SimpleMove> = moves.into_iter().map(|s| SimpleMove::from_pgn_str(s).unwrap()).collect();
         new_moves.sort();
         new_moves
     }
@@ -926,7 +927,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["e2e3", "e2e4"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -939,7 +940,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["h7h6", "h7h5"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -952,7 +953,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["c7c6"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -965,7 +966,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["e4e5", "e4d5"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -978,7 +979,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["e4e5", "e4d5"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -992,7 +993,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["f5f6", "f5g6"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -1005,7 +1006,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["g4h6", "g4f6", "g4e3", "g4e5"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -1018,7 +1019,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["f5g6", "f5e6", "f5e4", "f5d3", "f5c2", "f5g4", "f5h3"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -1031,7 +1032,7 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["c5b5", "c5a5", "c5d5", "c5e5", "c5c6", "c5c7", "c5c4", "c5c3"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -1047,7 +1048,7 @@ mod tests {
             "f5f6", "f5f7", "f5f4", "f5f3", "f5g5", "f5h5", "f5e5", "f5d5", "f5c5", "f5b5", "f5a5", "f5g6", "f5h7",
             "f5g4", "f5h3", "f5e6", "f5d7", "f5e4", "f5d3",
         ]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
@@ -1060,22 +1061,22 @@ mod tests {
             .collect();
         moves.sort();
         let exp_moves = moves_from_strs(vec!["e5e6", "e5f6", "e5d6", "e5d5", "e5d4", "e5e4", "e5f4"]);
-        assert_eq!(moves, exp_moves)
+        assert_eq!(moves, exp_moves);
     }
 
     #[test]
     fn king_in_check() {
         let board = ChessBoard::from_fen("k3r3/1P6/4K3/8/8/8/8/8 w - - 0 2").unwrap();
-        assert_eq!(board.king_in_check(PieceColour::White).unwrap(), true);
-        assert_eq!(board.king_in_check(PieceColour::Black).unwrap(), true);
+        assert!(board.king_in_check(PieceColour::White).unwrap());
+        assert!(board.king_in_check(PieceColour::Black).unwrap());
         assert_eq!(board.state().unwrap(), BoardState::Check);
     }
 
     #[test]
     fn king_not_in_check() {
         let board = ChessBoard::from_fen("k3r3/8/1P6/3K4/8/8/8/8 w - - 0 2").unwrap();
-        assert_eq!(board.king_in_check(PieceColour::White).unwrap(), false);
-        assert_eq!(board.king_in_check(PieceColour::Black).unwrap(), false);
+        assert!(board.king_in_check(PieceColour::White).unwrap());
+        assert!(board.king_in_check(PieceColour::Black).unwrap());
         assert_eq!(board.state().unwrap(), BoardState::Normal);
     }
 
@@ -1089,7 +1090,7 @@ mod tests {
                 .into_iter()
                 .next()
                 .is_none()
-        )
+        );
     }
 
     #[test]
@@ -1151,7 +1152,6 @@ mod tests {
         }
         board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
         board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
-        println!("{}", board.halfmove_clock);
         assert_eq!(board.state().unwrap(), BoardState::Stalemate);
     }
 
@@ -1167,7 +1167,6 @@ mod tests {
         board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
         board.move_piece(SimpleMove::from_pgn_str("e7e5").unwrap()).unwrap();
         board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
-        println!("{}", board.halfmove_clock);
         assert_eq!(board.state().unwrap(), BoardState::Normal);
     }
 
