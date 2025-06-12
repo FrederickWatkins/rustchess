@@ -1,38 +1,43 @@
-use crate::types::*;
+//! Library wide error handling
+use std::fmt::Debug;
 use thiserror::Error;
 
+use crate::{
+    enums::{AmbiguousMove, BoardState},
+    simple_types::{SimpleMove, SimpleSquare},
+};
+
 #[derive(Error, Debug)]
+/// Errors common across library interfaces
+#[allow(missing_docs)] // Enum variants self documented by error messages
 pub enum ChessError {
     #[error("Piece not found at {0}")]
-    PieceMissing(IntChessSquare),
+    PieceNotFound(SimpleSquare),
 
-    #[error("Illegal move attempted from {} to {}", 0.0, 0.1)]
-    IllegalMove(ChessMove),
+    #[error("Board in invalid state, info: {0}")]
+    InvalidBoard(String),
 
-    #[error("Attempted to query piece of non-turn colour {0}")]
-    WrongColour(IntChessSquare),
+    #[error("Illegal move {0:?}")]
+    IllegalMove(SimpleMove),
 
-    #[error("Attempted to undo move when none have been played")]
-    FirstMove,
-
-    #[error("Move {0} impossible at current board state")]
+    #[error("Impossible move {0}")]
     ImpossibleMove(AmbiguousMove),
 
-    #[error("Underdefined move {0} with multiple solutions at current board state")]
-    UnderdefinedMove(AmbiguousMove),
+    #[error("Ambiguous move not adequately defined {0}")]
+    AmbiguousMove(AmbiguousMove),
 
-    #[error("Invalid FEN")]
-    InvalidFEN,
+    #[error("File must be between 0-7 inclusive, {0} > 7")]
+    InvalidFile(u8),
 
-    #[error("Invalid PGN, {0}")]
+    #[error("Rank must be between 0-7 inclusive, {0} > 7")]
+    InvalidRank(u8),
+
+    #[error("{0:?} is not an actionable move")]
+    NotAction(BoardState),
+
+    #[error("Invalid PGN: {0}")]
     InvalidPGN(String),
 
-    #[error("Invalid position {0}")]
-    InvalidPosition(String),
-
-    #[error("Moves requested when none are available in current board state")]
-    NoMoves,
-
-    #[error("({0}, {1}) invalid square on chess board")]
-    InvalidSquare(i8, i8),
+    #[error("Invalid FEN: {0}")]
+    InvalidFEN(String),
 }

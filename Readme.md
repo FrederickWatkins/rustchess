@@ -6,17 +6,6 @@ A rusty chess library, CLI and hopefully eventually engine, TUI and maybe even G
 
 ### unchess-lib
 ```rust
-use unchess_lib::{game::*, board::*, traits::*, types::*};
-
-fn main() {
-    let mut g = GameTree::<TransparentBoard>::starting_board();
-    println!("{}", g.current_board());
-    match g.disambiguate_move(AmbiguousMove::try_from("e4").unwrap()) {
-        Ok(chess_move) => g.move_piece_checked(chess_move).unwrap(),
-        Err(e) => println!("{e}"),
-    }
-    println!("{}", g.current_board());
-}
 ```
 
 ### unchess-cli

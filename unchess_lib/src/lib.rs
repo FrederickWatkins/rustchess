@@ -1,14 +1,12 @@
-#![allow(dead_code)]
+//! Chess backend and engine library
 
 pub mod board;
+pub mod enums;
 pub mod error;
+pub mod notation;
+mod parser;
+pub mod simple_types;
 pub mod traits;
-pub mod types;
-pub mod game;
-pub mod engine;
-pub mod piece;
-
-pub use traits::*;
 
 #[cfg(doctest)]
 #[doc = include_str!("../../Readme.md")]

@@ -1,5 +1,4 @@
-pub mod transparent_board;
-pub mod bitboard;
+//! Chess board representations
 
-pub use transparent_board::*;
-pub use bitboard::*;
+pub mod bitboard;
+pub mod piece_list;
