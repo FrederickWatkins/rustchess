@@ -7,7 +7,10 @@ use unchess_lib::{
     board::piece_list::ChessBoard,
     simple_types::SimpleMove,
     traits::{ChessBoard as _, LegalMoveGenerator, PLegalMoveGenerator as _},
+    notation::pgn_to_moves,
 };
+
+const BYRNE_FISCHER_1956: &str = include_str!("pgn/byrne_fischer_1956.pgn");
 
 fn play_checked_moves(moves: &Vec<SimpleMove>) {
     let mut board = ChessBoard::starting_board();
@@ -48,19 +51,20 @@ fn generate_pchecked_moves(moves: &Vec<SimpleMove>) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut moves: Vec<SimpleMove> = vec![];
+    let pgn = pgn_to_moves(BYRNE_FISCHER_1956).unwrap();
     let mut board = ChessBoard::starting_board();
-    for _i in 0..100 {
-        let chess_move = board.all_legal_moves().unwrap().into_iter().next().unwrap();
+    for ambiguous_move in pgn {
+        let chess_move = board.disambiguate_move_internal(ambiguous_move).unwrap();
         moves.push(chess_move);
         board.move_piece(chess_move).unwrap();
     }
-    c.bench_function("100 checked moves", |b| b.iter(|| play_checked_moves(&moves)));
-    c.bench_function("100 psuedo-checked moves", |b| b.iter(|| play_pchecked_moves(&moves)));
-    c.bench_function("100 unchecked moves", |b| b.iter(|| play_unchecked_moves(&moves)));
-    c.bench_function("100 generated legal moves", |b| {
+    c.bench_function("Legal move checking", |b| b.iter(|| play_checked_moves(&moves)));
+    c.bench_function("Pseudo-legal move checking", |b| b.iter(|| play_pchecked_moves(&moves)));
+    c.bench_function("Unchecked moving", |b| b.iter(|| play_unchecked_moves(&moves)));
+    c.bench_function("Legal move generation", |b| {
         b.iter(|| generate_checked_moves(&moves))
     });
-    c.bench_function("100 generated pseudo-legal moves", |b| {
+    c.bench_function("Pseudo-legal move generation", |b| {
         b.iter(|| generate_pchecked_moves(&moves))
     });
 }
