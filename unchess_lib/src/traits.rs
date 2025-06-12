@@ -44,7 +44,7 @@ pub trait ChessSquare {
 /// Can't be a transparent shared data type because of differences in internal board
 /// representations, so setters and getters must be used instead.
 ///
-/// For an ambiguous chess move datatype compatible with PGN notation, see TODO
+/// For an ambiguous chess move datatype compatible with PGN notation, see [`crate::enums::AmbiguousMove`]
 pub trait ChessMove<S: ChessSquare> {
     /// Source square of the chess move
     fn src(&self) -> S;
@@ -102,7 +102,7 @@ pub trait ChessPiece {
 ///
 /// Implies no ability to check the legality of moves or to ensure that the board is in a valid
 /// state, just the ability to store and manipulate internal state
-pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
+pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>>: From<Fen> {
     /// Return the default starting chess board
     ///
     /// White's turn, all pieces in starting positions, with castling rights.
@@ -113,9 +113,6 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
         Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap()
     }
 
-    /// Generate board from internal FEN representation
-    fn from_fen_internal(fen: Fen) -> Self;
-
     /// Generate board from FEN standard string
     ///
     /// # Errors
@@ -125,7 +122,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>> {
         Self: Sized,
     {
         if let Ok(fen) = fen_parser(fen) {
-            Ok(Self::from_fen_internal(fen.1))
+            Ok(Self::from(fen.1))
         } else {
             Err(ChessError::InvalidFEN(fen.to_string()))
         }

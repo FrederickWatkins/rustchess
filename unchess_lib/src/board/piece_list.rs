@@ -180,32 +180,6 @@ pub struct ChessBoard {
 }
 
 impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
-    fn from_fen_internal(fen: Fen) -> Self {
-        // TODO change to use From<Fen> trait
-        let mut pieces: Vec<ChessPiece> = vec![];
-        for (i, rank) in fen.layout.into_iter().enumerate() {
-            for (j, piece) in rank.into_iter().enumerate() {
-                if let Some(piece) = piece {
-                    pieces.push(ChessPiece::new(
-                        SimpleSquare::new(j as u8, 7 - i as u8),
-                        piece.kind(),
-                        piece.colour(),
-                    ));
-                }
-            }
-        }
-
-        Self {
-            pieces,
-            turn: fen.turn,
-            en_passant: fen.en_passant,
-            castling_rights: fen.castling_rights,
-            halfmove_clock: fen.halfmove_clock,
-            fullmove_number: fen.fullmove_number,
-            board_history: vec![],
-        }
-    }
-
     fn get_piece(&self, square: SimpleSquare) -> Result<ChessPiece, ChessError> {
         let pieces = self.pieces.iter().filter(|&&piece| piece.square() == square);
         match pieces.at_most_one() {
@@ -406,6 +380,33 @@ impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         match chess_move {
             AmbiguousMove::Normal { .. } => self.disambiguate_normal(chess_move),
             AmbiguousMove::Castle { .. } => Ok(self.disambiguate_castling(chess_move)),
+        }
+    }
+}
+
+impl From<Fen> for ChessBoard {
+    fn from(value: Fen) -> Self {
+        let mut pieces: Vec<ChessPiece> = vec![];
+        for (i, rank) in value.layout.into_iter().enumerate() {
+            for (j, piece) in rank.into_iter().enumerate() {
+                if let Some(piece) = piece {
+                    pieces.push(ChessPiece::new(
+                        SimpleSquare::new(j as u8, 7 - i as u8),
+                        piece.kind(),
+                        piece.colour(),
+                    ));
+                }
+            }
+        }
+
+        Self {
+            pieces,
+            turn: value.turn,
+            en_passant: value.en_passant,
+            castling_rights: value.castling_rights,
+            halfmove_clock: value.halfmove_clock,
+            fullmove_number: value.fullmove_number,
+            board_history: vec![],
         }
     }
 }
