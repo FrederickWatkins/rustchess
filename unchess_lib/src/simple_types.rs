@@ -19,7 +19,7 @@ use crate::traits::ChessSquare;
 ///
 /// Internally represented as two u8s, for file and rank. Used by error types and non bittwiddling
 /// boards.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimpleSquare {
     file: u8,
     rank: u8,

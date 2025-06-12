@@ -10,7 +10,7 @@ use crate::{error::ChessError, notation, parser, simple_types::SimpleSquare, tra
 
 /// Colour of piece
 #[allow(missing_docs)] // Enum variants self explanatory
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PieceColour {
     Black,
     White,
@@ -39,7 +39,7 @@ impl PieceColour {
 
 /// Type of piece
 #[allow(missing_docs)] // Enum variants self explanatory
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PieceKind {
     King,
     Queen,

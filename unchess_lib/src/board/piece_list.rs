@@ -5,6 +5,7 @@
 //! slow.
 
 use core::fmt;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 use crate::enums::{AmbiguousMove, BoardState, CastlingSide, PieceColour, PieceKind};
@@ -95,7 +96,7 @@ impl Sub for SimpleSquare {
 /// Chess piece representation
 ///
 /// Internally contains position as well as piece kind and colour
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ChessPiece {
     square: SimpleSquare,
     kind: PieceKind,
@@ -175,6 +176,7 @@ pub struct ChessBoard {
     castling_rights: [bool; 4],
     halfmove_clock: u32,
     fullmove_number: u32,
+    board_history: Vec<u64>,
 }
 
 impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
@@ -200,6 +202,7 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
             castling_rights: fen.castling_rights,
             halfmove_clock: fen.halfmove_clock,
             fullmove_number: fen.fullmove_number,
+            board_history: vec![],
         }
     }
 
@@ -221,6 +224,7 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         let taken_piece = self.pieces.iter().position(|piece| piece.square() == chess_move.dest());
 
         self.halfmove_clock += 1;
+        self.board_history.push(self.hash_board_state());
 
         let piece = self.get_piece_mut(chess_move.src())?;
         piece.move_piece(chess_move.dest());
@@ -296,7 +300,15 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
 
     fn piece_plegal_moves(&self, square: SimpleSquare) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let piece = self.get_piece(square)?;
-        if piece.colour != self.turn || self.halfmove_clock >= 50 {
+        if piece.colour != self.turn
+            || self.halfmove_clock >= 50
+            || self
+                .board_history
+                .iter()
+                .filter(|&&board_hash| board_hash == self.hash_board_state())
+                .count()
+                >= 2
+        {
             return Ok(vec![]);
         }
         match piece.kind() {
@@ -786,6 +798,20 @@ impl ChessBoard {
     pub fn as_fen_str(&self) -> Result<String, ChessError> {
         Ok(Fen::try_from(self)?.to_str())
     }
+
+    /// Hash current board state
+    ///
+    /// Includes piece positions, current turn, castling rights and en-passant
+    pub fn hash_board_state(&self) -> u64 {
+        let mut pieces = self.pieces.clone();
+        pieces.sort_unstable();
+        let mut hasher = DefaultHasher::new();
+        pieces.hash(&mut hasher);
+        self.turn.hash(&mut hasher);
+        self.castling_rights.hash(&mut hasher);
+        self.en_passant.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 impl fmt::Display for ChessBoard {
@@ -861,6 +887,7 @@ mod tests {
             castling_rights: [false, false, false, false],
             halfmove_clock: 0,
             fullmove_number: 1,
+            board_history: vec![],
         };
         let e = board.get_piece(square).unwrap_err();
         match e {
@@ -879,6 +906,7 @@ mod tests {
             castling_rights: [false, false, false, false],
             halfmove_clock: 0,
             fullmove_number: 1,
+            board_history: vec![],
         };
         let e = board.get_piece(square).unwrap_err();
         match e {
@@ -1140,5 +1168,17 @@ mod tests {
         board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
         println!("{}", board.halfmove_clock);
         assert_eq!(board.state().unwrap(), BoardState::Normal);
+    }
+
+    #[test]
+    fn threefold_repetition() {
+        let mut board = ChessBoard::starting_board();
+        for _ in 0..3 {
+            board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f3g1").unwrap()).unwrap();
+            board.move_piece(SimpleMove::from_pgn_str("f6g8").unwrap()).unwrap();
+        }
+        assert_eq!(board.state().unwrap(), BoardState::Stalemate);
     }
 }
