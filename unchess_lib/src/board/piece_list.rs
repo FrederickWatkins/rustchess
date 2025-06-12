@@ -813,21 +813,6 @@ impl ChessBoard {
     pub fn as_fen_str(&self) -> Result<String, ChessError> {
         Ok(Fen::try_from(self)?.to_str())
     }
-
-    // Hash current board state
-    //
-    // Includes piece positions, current turn, castling rights and en-passant
-    // TODO fix perf problem
-    // pub fn hash_board_state(&self) -> u64 {
-    //     let mut pieces = self.pieces.clone();
-    //     pieces.sort_unstable();
-    //     let mut hasher = DefaultHasher::new();
-    //     pieces.hash(&mut hasher);
-    //     self.turn.hash(&mut hasher);
-    //     self.castling_rights.hash(&mut hasher);
-    //     self.en_passant.hash(&mut hasher);
-    //     hasher.finish()
-    // }
 }
 
 impl fmt::Display for ChessBoard {

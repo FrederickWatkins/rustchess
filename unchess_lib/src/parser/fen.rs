@@ -205,7 +205,7 @@ impl Fen {
                     let layout: Box<[[Option<SimplePiece>; 8]; 8]> = Box::new(
                         layout
                             .iter()
-                            .map(|arr| arr.into_iter().map(|&p| p).collect_array().unwrap())
+                            .map(|arr| arr.iter().copied().collect_array().unwrap())
                             .collect_array()
                             .unwrap(),
                     );
@@ -285,16 +285,14 @@ mod tests {
         #[test]
         fn layouts(l in vec(vec(of(SimplePiece::strategy()), 8), 8)) {
             #[rustfmt::skip]
-            let layout: Box<[[Option<SimplePiece>; 8]; 8]> = Box::new(l.iter().map(|arr| arr.into_iter().map(|&p| p).collect_array().unwrap()).collect_array().unwrap());
+            let layout: Box<[[Option<SimplePiece>; 8]; 8]> = Box::new(l.iter().map(|arr| arr.iter().copied().collect_array().unwrap()).collect_array().unwrap());
             let s = layout_to_str(&layout);
-            println!("2");
             assert_eq!(board_layout(&s).unwrap(), ("", layout));
         }
 
         #[test]
         fn fens(f in Fen::strategy()) {
-            println!("{}", f.to_str());
-            assert_eq!(fen(&f.to_str()).unwrap(), ("", f))
+            assert_eq!(fen(&f.to_str()).unwrap(), ("", f));
         }
     }
 }

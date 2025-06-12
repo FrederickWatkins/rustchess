@@ -62,7 +62,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Pseudo-legal move checking", |b| b.iter(|| play_pchecked_moves(&moves)));
     c.bench_function("Unchecked moving", |b| b.iter(|| play_unchecked_moves(&moves)));
     c.bench_function("Legal move generation", |b| b.iter(|| generate_checked_moves(&moves)));
-    c.bench_function("Pseudo-legal move generation", |b| {b.iter(|| generate_pchecked_moves(&moves))});
+    c.bench_function("Pseudo-legal move generation", |b| {
+        b.iter(|| generate_pchecked_moves(&moves))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
