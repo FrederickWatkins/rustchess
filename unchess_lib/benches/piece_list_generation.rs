@@ -5,9 +5,9 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use unchess_lib::{
     board::piece_list::ChessBoard,
-    simple_types::SimpleMove,
-    traits::{ChessBoard as _, LegalMoveGenerator, PLegalMoveGenerator as _},
     notation::pgn_to_moves,
+    simple_types::SimpleMove,
+    traits::{ChessBoard as _, LegalMoveGenerator as _, PLegalMoveGenerator as _},
 };
 
 const BYRNE_FISCHER_1956: &str = include_str!("pgn/byrne_fischer_1956.pgn");
@@ -61,12 +61,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Legal move checking", |b| b.iter(|| play_checked_moves(&moves)));
     c.bench_function("Pseudo-legal move checking", |b| b.iter(|| play_pchecked_moves(&moves)));
     c.bench_function("Unchecked moving", |b| b.iter(|| play_unchecked_moves(&moves)));
-    c.bench_function("Legal move generation", |b| {
-        b.iter(|| generate_checked_moves(&moves))
-    });
-    c.bench_function("Pseudo-legal move generation", |b| {
-        b.iter(|| generate_pchecked_moves(&moves))
-    });
+    c.bench_function("Legal move generation", |b| b.iter(|| generate_checked_moves(&moves)));
+    c.bench_function("Pseudo-legal move generation", |b| {b.iter(|| generate_pchecked_moves(&moves))});
 }
 
 criterion_group!(benches, criterion_benchmark);

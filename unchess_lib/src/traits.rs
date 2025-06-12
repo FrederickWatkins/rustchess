@@ -44,7 +44,8 @@ pub trait ChessSquare {
 /// Can't be a transparent shared data type because of differences in internal board
 /// representations, so setters and getters must be used instead.
 ///
-/// For an ambiguous chess move datatype compatible with PGN notation, see [`crate::enums::AmbiguousMove`]
+/// For an ambiguous chess move datatype compatible with PGN notation, see
+/// [`crate::enums::AmbiguousMove`]
 pub trait ChessMove<S: ChessSquare> {
     /// Source square of the chess move
     fn src(&self) -> S;

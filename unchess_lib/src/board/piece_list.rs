@@ -5,7 +5,6 @@
 //! slow.
 
 use core::fmt;
-use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::ops::{Add, AddAssign, Div, Mul, Sub};
 
 use crate::enums::{AmbiguousMove, BoardState, CastlingSide, PieceColour, PieceKind};
@@ -167,6 +166,8 @@ impl ChessPiece {
     }
 }
 
+type BoardHistoryElem = (Vec<ChessPiece>, PieceColour, Option<SimpleSquare>, [bool; 4]);
+
 /// Piece list representation of chess board
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChessBoard {
@@ -176,7 +177,7 @@ pub struct ChessBoard {
     castling_rights: [bool; 4],
     halfmove_clock: u32,
     fullmove_number: u32,
-    board_history: Vec<u64>,
+    board_history: Vec<BoardHistoryElem>,
 }
 
 impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
@@ -190,7 +191,7 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
     }
 
     fn all_pieces(&self) -> impl IntoIterator<Item = ChessPiece> {
-        self.pieces.iter().copied()
+        self.pieces.iter().copied().sorted_unstable()
     }
 
     fn move_piece(&mut self, chess_move: SimpleMove) -> Result<(), ChessError> {
@@ -198,7 +199,12 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         let taken_piece = self.pieces.iter().position(|piece| piece.square() == chess_move.dest());
 
         self.halfmove_clock += 1;
-        self.board_history.push(self.hash_board_state());
+        self.board_history.push((
+            self.all_pieces().into_iter().collect(),
+            self.turn,
+            self.en_passant,
+            self.castling_rights,
+        ));
 
         let piece = self.get_piece_mut(chess_move.src())?;
         piece.move_piece(chess_move.dest());
@@ -279,7 +285,15 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
             || self
                 .board_history
                 .iter()
-                .filter(|&&board_hash| board_hash == self.hash_board_state())
+                .filter(|board_state| {
+                    board_state
+                        == &&(
+                            self.all_pieces().into_iter().collect(),
+                            self.turn,
+                            self.en_passant,
+                            self.castling_rights,
+                        )
+                })
                 .count()
                 >= 2
         {
@@ -406,7 +420,7 @@ impl From<Fen> for ChessBoard {
             castling_rights: value.castling_rights,
             halfmove_clock: value.halfmove_clock,
             fullmove_number: value.fullmove_number,
-            board_history: vec![],
+            board_history: Vec::with_capacity(100),
         }
     }
 }
@@ -800,20 +814,20 @@ impl ChessBoard {
         Ok(Fen::try_from(self)?.to_str())
     }
 
-    /// Hash current board state
-    ///
-    /// Includes piece positions, current turn, castling rights and en-passant
-    /// TODO fix perf problem
-    pub fn hash_board_state(&self) -> u64 {
-        let mut pieces = self.pieces.clone();
-        pieces.sort_unstable();
-        let mut hasher = DefaultHasher::new();
-        pieces.hash(&mut hasher);
-        self.turn.hash(&mut hasher);
-        self.castling_rights.hash(&mut hasher);
-        self.en_passant.hash(&mut hasher);
-        hasher.finish()
-    }
+    // Hash current board state
+    //
+    // Includes piece positions, current turn, castling rights and en-passant
+    // TODO fix perf problem
+    // pub fn hash_board_state(&self) -> u64 {
+    //     let mut pieces = self.pieces.clone();
+    //     pieces.sort_unstable();
+    //     let mut hasher = DefaultHasher::new();
+    //     pieces.hash(&mut hasher);
+    //     self.turn.hash(&mut hasher);
+    //     self.castling_rights.hash(&mut hasher);
+    //     self.en_passant.hash(&mut hasher);
+    //     hasher.finish()
+    // }
 }
 
 impl fmt::Display for ChessBoard {
@@ -852,7 +866,10 @@ mod tests {
     use super::*;
 
     fn moves_from_strs(moves: Vec<&str>) -> Vec<SimpleMove> {
-        let mut new_moves: Vec<SimpleMove> = moves.into_iter().map(|s| SimpleMove::from_pgn_str(s).unwrap()).collect();
+        let mut new_moves: Vec<SimpleMove> = moves
+            .into_iter()
+            .map(|s| SimpleMove::from_pgn_str(s).unwrap())
+            .collect();
         new_moves.sort();
         new_moves
     }
@@ -1075,8 +1092,8 @@ mod tests {
     #[test]
     fn king_not_in_check() {
         let board = ChessBoard::from_fen("k3r3/8/1P6/3K4/8/8/8/8 w - - 0 2").unwrap();
-        assert!(board.king_in_check(PieceColour::White).unwrap());
-        assert!(board.king_in_check(PieceColour::Black).unwrap());
+        assert!(!board.king_in_check(PieceColour::White).unwrap());
+        assert!(!board.king_in_check(PieceColour::Black).unwrap());
         assert_eq!(board.state().unwrap(), BoardState::Normal);
     }
 
