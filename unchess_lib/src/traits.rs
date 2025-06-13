@@ -46,12 +46,15 @@ pub trait ChessSquare {
 ///
 /// For an ambiguous chess move datatype compatible with PGN notation, see
 /// [`crate::enums::AmbiguousMove`]
-pub trait ChessMove<S: ChessSquare> {
+pub trait ChessMove {
+    /// The internal square representation
+    type Square: ChessSquare;
+
     /// Source square of the chess move
-    fn src(&self) -> S;
+    fn src(&self) -> Self::Square;
 
     /// Destination square of the chess move
-    fn dest(&self) -> S;
+    fn dest(&self) -> Self::Square;
 
     /// Piece to promote to if pawn reaching end of board
     fn promote_to(&self) -> Option<PieceKind>;
@@ -103,7 +106,14 @@ pub trait ChessPiece {
 ///
 /// Implies no ability to check the legality of moves or to ensure that the board is in a valid
 /// state, just the ability to store and manipulate internal state
-pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>>: From<Fen> {
+pub trait ChessBoard: From<Fen> {
+    /// The internal square represntation
+    type Square: ChessSquare;
+    /// The internal piece representation
+    type Piece: ChessPiece;
+    /// The representation for moves
+    type Move: ChessMove;
+
     /// Return the default starting chess board
     ///
     /// White's turn, all pieces in starting positions, with castling rights.
@@ -135,12 +145,12 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>>: From<Fen> 
     /// # Errors
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
     /// - [`crate::error::ChessError::InvalidBoard`] if board in invalid state
-    fn get_piece(&self, square: S) -> Result<P, ChessError>;
+    fn get_piece(&self, square: Self::Square) -> Result<Self::Piece, ChessError>;
 
     /// Return iterator over all pieces on board
     ///
     /// No guaranteed order.
-    fn all_pieces(&self) -> impl IntoIterator<Item = P>;
+    fn all_pieces(&self) -> impl IntoIterator<Item = Self::Piece>;
 
     /// Moves a piece on the chess board
     ///
@@ -149,7 +159,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>>: From<Fen> 
     ///
     /// # Errors
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn move_piece(&mut self, chess_move: M) -> Result<(), ChessError>;
+    fn move_piece(&mut self, chess_move: Self::Move) -> Result<(), ChessError>;
 }
 
 /// Pseudo-legal move generator
@@ -158,7 +168,7 @@ pub trait ChessBoard<S: ChessSquare, P: ChessPiece, M: ChessMove<S>>: From<Fen> 
 /// where a piece may move, but do not necessarily leave the board in a valid state after they are
 /// executed e.g. the king may be left in check. Associated functions generally much faster than
 /// [`LegalMoveGenerator`].
-pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 'static>: ChessBoard<S, P, M> {
+pub trait PLegalMoveGenerator: ChessBoard {
     /// Return all pseudo-legal moves from the current board state
     ///
     /// Will not check for leaving the king in check, if strict legality is necessary then use
@@ -168,7 +178,7 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + '
     /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
-    fn all_plegal_moves(&self) -> Result<impl IntoIterator<Item = M>, ChessError>;
+    fn all_plegal_moves(&self) -> Result<impl IntoIterator<Item = Self::Move>, ChessError>;
 
     /// Return all pseudo-legal moves for the piece at `square`
     ///
@@ -180,7 +190,7 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + '
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
-    fn piece_plegal_moves(&self, square: S) -> Result<impl IntoIterator<Item = M>, ChessError>;
+    fn piece_plegal_moves(&self, square: Self::Square) -> Result<impl IntoIterator<Item = Self::Move>, ChessError>;
 
     /// Return true if move `chess_move` is pseudo-legal
     ///
@@ -192,7 +202,7 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + '
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn is_move_plegal(&self, chess_move: M) -> Result<bool, ChessError>;
+    fn is_move_plegal(&self, chess_move: Self::Move) -> Result<bool, ChessError>;
 
     /// Move piece if move is pseudo-legal, otherwise error
     ///
@@ -205,23 +215,21 @@ pub trait PLegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + '
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_plegal(&mut self, chess_move: M) -> Result<(), ChessError>;
+    fn move_piece_plegal(&mut self, chess_move: Self::Move) -> Result<(), ChessError>;
 }
 
 /// Strict legal move generator
 ///
 /// Capable of generating strictly legal moves e.g. moves that both fulfil pieces' individual
 /// movement requirements and do not leave the king in check.
-pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 'static>:
-    PLegalMoveGenerator<S, P, M>
-{
+pub trait LegalMoveGenerator: PLegalMoveGenerator {
     /// Return all legal moves from the current board state
     ///
     /// # Errors
     /// - [`crate::error::ChessError::InvalidBoard`] if the board is in an invalid state, for
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
-    fn all_legal_moves(&self) -> Result<impl IntoIterator<Item = M>, ChessError>;
+    fn all_legal_moves(&self) -> Result<impl IntoIterator<Item = Self::Move>, ChessError>;
 
     /// Return all legal moves for the piece at `square`
     ///
@@ -230,7 +238,7 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `square`
-    fn piece_legal_moves(&self, square: S) -> Result<impl IntoIterator<Item = M>, ChessError>;
+    fn piece_legal_moves(&self, square: Self::Square) -> Result<impl IntoIterator<Item = Self::Move>, ChessError>;
 
     /// Return true if move `chess_move` is legal
     ///
@@ -239,7 +247,7 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   example if there are no pieces of the colour of the current turn or there is not one king
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
-    fn is_move_legal(&self, chess_move: M) -> Result<bool, ChessError>;
+    fn is_move_legal(&self, chess_move: Self::Move) -> Result<bool, ChessError>;
 
     /// Move piece if move is legal, otherwise error
     ///
@@ -249,7 +257,7 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::PieceNotFound`] if no piece present at `chess_move.src()`
     /// - [`crate::error::ChessError::IllegalMove`] if chess_move is illegal
-    fn move_piece_legal(&mut self, chess_move: M) -> Result<(), ChessError>;
+    fn move_piece_legal(&mut self, chess_move: Self::Move) -> Result<(), ChessError>;
 
     /// Get current board state
     ///
@@ -267,7 +275,7 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::ImpossibleMove`] if no moves match the given move
     /// - [`crate::error::ChessError::AmbiguousMove`] if multiple moves match the given move
-    fn disambiguate_move_internal(&self, chess_move: AmbiguousMove) -> Result<M, ChessError>;
+    fn disambiguate_move(&self, chess_move: AmbiguousMove) -> Result<Self::Move, ChessError>;
 
     /// Disambiguate move from pgn str format
     ///
@@ -277,9 +285,9 @@ pub trait LegalMoveGenerator<S: ChessSquare, P: ChessPiece, M: ChessMove<S> + 's
     ///   of each colour on the board.
     /// - [`crate::error::ChessError::ImpossibleMove`] if no moves match the given move
     /// - [`crate::error::ChessError::AmbiguousMove`] if multiple moves match the given move
-    fn disambiguate_move(&self, pgn: &str) -> Result<M, ChessError> {
+    fn disambiguate_move_pgn(&self, pgn: &str) -> Result<Self::Move, ChessError> {
         if let Ok((_, chess_move)) = chess_move_parser(pgn) {
-            self.disambiguate_move_internal(chess_move)
+            self.disambiguate_move(chess_move)
         } else {
             Err(ChessError::InvalidPGN(pgn.to_string()))
         }

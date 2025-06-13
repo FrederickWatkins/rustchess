@@ -1,6 +1,6 @@
 //! Integration tests for parsing
 #![allow(clippy::tests_outside_test_module)]
-use unchess_lib::board::piece_list::ChessBoard;
+use unchess_lib::board::piece_list::PieceListBoard;
 use unchess_lib::notation::pgn_to_moves;
 use unchess_lib::traits::{ChessBoard as _, LegalMoveGenerator as _};
 
@@ -11,10 +11,10 @@ const FISCHER_MYAGMARSUREN_1967: &str = include_str!("pgn/fischer_myagmarsuren_1
 const FISCHER_SPASSKY_1972: &str = include_str!("pgn/fischer_spassky_1972.pgn");
 
 fn test_pgn(pgn: &str) {
-    let mut board = ChessBoard::starting_board();
+    let mut board = PieceListBoard::starting_board();
     let moves = pgn_to_moves(pgn).unwrap();
     for chess_move in moves {
-        let unamb_move = board.disambiguate_move_internal(chess_move).unwrap();
+        let unamb_move = board.disambiguate_move(chess_move).unwrap();
         board.move_piece_legal(unamb_move).unwrap();
     }
 }

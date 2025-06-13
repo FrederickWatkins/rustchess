@@ -96,13 +96,13 @@ impl Sub for SimpleSquare {
 ///
 /// Internally contains position as well as piece kind and colour
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChessPiece {
+pub struct PieceWithPos {
     square: SimpleSquare,
     kind: PieceKind,
     colour: PieceColour,
 }
 
-impl traits::ChessPiece for ChessPiece {
+impl traits::ChessPiece for PieceWithPos {
     fn kind(&self) -> PieceKind {
         self.kind
     }
@@ -112,19 +112,19 @@ impl traits::ChessPiece for ChessPiece {
     }
 }
 
-impl fmt::Display for ChessPiece {
+impl fmt::Display for PieceWithPos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_fen())
     }
 }
 
-impl From<ChessPiece> for SimplePiece {
-    fn from(value: ChessPiece) -> Self {
+impl From<PieceWithPos> for SimplePiece {
+    fn from(value: PieceWithPos) -> Self {
         SimplePiece::new(value.kind, value.colour)
     }
 }
 
-impl ChessPiece {
+impl PieceWithPos {
     /// Chess piece
     pub fn new(square: SimpleSquare, kind: PieceKind, colour: PieceColour) -> Self {
         Self { square, kind, colour }
@@ -166,12 +166,12 @@ impl ChessPiece {
     }
 }
 
-type BoardHistoryElem = (Vec<ChessPiece>, PieceColour, Option<SimpleSquare>, [bool; 4]);
+type BoardHistoryElem = (Vec<PieceWithPos>, PieceColour, Option<SimpleSquare>, [bool; 4]);
 
 /// Piece list representation of chess board
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ChessBoard {
-    pieces: Vec<ChessPiece>,
+pub struct PieceListBoard {
+    pieces: Vec<PieceWithPos>,
     turn: PieceColour,
     en_passant: Option<SimpleSquare>,
     castling_rights: [bool; 4],
@@ -180,8 +180,11 @@ pub struct ChessBoard {
     board_history: Vec<BoardHistoryElem>,
 }
 
-impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
-    fn get_piece(&self, square: SimpleSquare) -> Result<ChessPiece, ChessError> {
+impl traits::ChessBoard for PieceListBoard {
+    type Square = SimpleSquare;
+    type Piece = PieceWithPos;
+    type Move = SimpleMove;
+    fn get_piece(&self, square: SimpleSquare) -> Result<PieceWithPos, ChessError> {
         let pieces = self.pieces.iter().filter(|&&piece| piece.square() == square);
         match pieces.at_most_one() {
             Ok(Some(piece)) => Ok(*piece),
@@ -190,7 +193,7 @@ impl traits::ChessBoard<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         }
     }
 
-    fn all_pieces(&self) -> impl IntoIterator<Item = ChessPiece> {
+    fn all_pieces(&self) -> impl IntoIterator<Item = PieceWithPos> {
         self.pieces.iter().copied().sorted_unstable()
     }
 
@@ -266,7 +269,7 @@ const KNIGHT_PATTERN: [SquareOffset; 8] = [
 
 const KING_PATTERN: [SquareOffset; 8] = QUEEN_DIRECTIONS;
 
-impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
+impl PLegalMoveGenerator for PieceListBoard {
     fn all_plegal_moves(&self) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let mut out: Vec<SimpleMove> = vec![];
         for piece in self.pieces.iter().filter(|piece| piece.colour == self.turn) {
@@ -330,7 +333,7 @@ impl PLegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
     }
 }
 
-impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
+impl LegalMoveGenerator for PieceListBoard {
     fn all_legal_moves(&self) -> Result<impl IntoIterator<Item = SimpleMove>, ChessError> {
         let mut moves: Vec<SimpleMove> = vec![];
         for chess_move in self.all_plegal_moves()? {
@@ -390,7 +393,7 @@ impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
         }
     }
 
-    fn disambiguate_move_internal(&self, chess_move: AmbiguousMove) -> Result<SimpleMove, ChessError> {
+    fn disambiguate_move(&self, chess_move: AmbiguousMove) -> Result<SimpleMove, ChessError> {
         match chess_move {
             AmbiguousMove::Normal { .. } => self.disambiguate_normal(chess_move),
             AmbiguousMove::Castle { .. } => Ok(self.disambiguate_castling(chess_move)),
@@ -398,13 +401,13 @@ impl LegalMoveGenerator<SimpleSquare, ChessPiece, SimpleMove> for ChessBoard {
     }
 }
 
-impl From<Fen> for ChessBoard {
+impl From<Fen> for PieceListBoard {
     fn from(value: Fen) -> Self {
-        let mut pieces: Vec<ChessPiece> = vec![];
+        let mut pieces: Vec<PieceWithPos> = vec![];
         for (i, rank) in value.layout.into_iter().enumerate() {
             for (j, piece) in rank.into_iter().enumerate() {
                 if let Some(piece) = piece {
-                    pieces.push(ChessPiece::new(
+                    pieces.push(PieceWithPos::new(
                         SimpleSquare::new(j as u8, 7 - i as u8),
                         piece.kind(),
                         piece.colour(),
@@ -425,9 +428,9 @@ impl From<Fen> for ChessBoard {
     }
 }
 
-impl ChessBoard {
+impl PieceListBoard {
     /// Mutable reference to piece on `square`
-    fn get_piece_mut(&mut self, square: SimpleSquare) -> Result<&mut ChessPiece, ChessError> {
+    fn get_piece_mut(&mut self, square: SimpleSquare) -> Result<&mut PieceWithPos, ChessError> {
         let pieces = self
             .pieces
             .iter_mut()
@@ -441,7 +444,7 @@ impl ChessBoard {
     }
 
     /// Check if king move was a castle and if so move rook
-    fn castle_rook(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
+    fn castle_rook(&mut self, piece: PieceWithPos, offset: SquareOffset) -> Result<(), ChessError> {
         const KINGSIDE_CASTLE: i8 = 2;
         const QUEENSIDE_CASTLE: i8 = -2;
         if piece.kind() == PieceKind::King && offset.file == KINGSIDE_CASTLE {
@@ -456,7 +459,7 @@ impl ChessBoard {
     }
 
     /// Check if move was en passant and if so take other pawn
-    fn take_en_passant(&mut self, piece: ChessPiece, offset: SquareOffset) -> Result<(), ChessError> {
+    fn take_en_passant(&mut self, piece: PieceWithPos, offset: SquareOffset) -> Result<(), ChessError> {
         if let Some(taken_pawn_square) = self.en_passant_target(piece, offset) {
             if let Some(taken_pawn) = self.pieces.iter().position(|piece| piece.square() == taken_pawn_square) {
                 self.pieces.remove(taken_pawn);
@@ -472,7 +475,7 @@ impl ChessBoard {
     }
 
     /// Check if move was en passant and if so return square of pawn to take
-    fn en_passant_target(&self, piece: ChessPiece, offset: SquareOffset) -> Option<SimpleSquare> {
+    fn en_passant_target(&self, piece: PieceWithPos, offset: SquareOffset) -> Option<SimpleSquare> {
         match self.en_passant {
             Some(en_passant) if piece.kind() == PieceKind::Pawn && piece.square() == en_passant => {
                 Some(piece.square() + SquareOffset::new(0, -offset.rank))
@@ -492,7 +495,7 @@ impl ChessBoard {
         }
     }
 
-    fn update_castling_rights(&mut self, piece: ChessPiece, chess_move: SimpleMove) {
+    fn update_castling_rights(&mut self, piece: PieceWithPos, chess_move: SimpleMove) {
         let castling_offset = Self::castling_right_offset(piece.colour);
         match piece.kind {
             PieceKind::King => {
@@ -520,7 +523,7 @@ impl ChessBoard {
             takes.push(square + SquareOffset::new(1, 1) * colour);
         }
         if self.square_empty(single_push)? {
-            moves.append(&mut ChessPiece::promotions_on_square(square, single_push));
+            moves.append(&mut PieceWithPos::promotions_on_square(square, single_push));
             if square.is_starting_rank(colour) && self.square_empty(square + SquareOffset::new(0, 2) * colour)? {
                 moves.push(SimpleMove::new(square, square + SquareOffset::new(0, 2) * colour, None));
             }
@@ -528,7 +531,7 @@ impl ChessBoard {
         for take in takes {
             match (self.en_passant, self.get_piece(take)) {
                 (_, Ok(other_piece)) if other_piece.colour != colour => {
-                    moves.append(&mut ChessPiece::promotions_on_square(square, take));
+                    moves.append(&mut PieceWithPos::promotions_on_square(square, take));
                 }
                 (Some(en_passant), Err(ChessError::PieceNotFound(_))) if en_passant == take => {
                     moves.push(SimpleMove::new(square, take, None));
@@ -815,16 +818,16 @@ impl ChessBoard {
     }
 }
 
-impl fmt::Display for ChessBoard {
+impl fmt::Display for PieceListBoard {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.fmt_board())
     }
 }
 
-impl TryFrom<&ChessBoard> for Fen {
+impl TryFrom<&PieceListBoard> for Fen {
     type Error = ChessError;
 
-    fn try_from(value: &ChessBoard) -> Result<Self, ChessError> {
+    fn try_from(value: &PieceListBoard) -> Result<Self, ChessError> {
         let mut layout: Box<[[Option<SimplePiece>; 8]; 8]> = Box::new([[None; 8]; 8]);
         for (inverse_rank_number, rank) in layout.iter_mut().enumerate() {
             for (file_number, piece) in rank.iter_mut().enumerate() {
@@ -881,10 +884,10 @@ mod tests {
     #[test]
     fn two_on_same_square() {
         let square = SimpleSquare::new(3, 2);
-        let board = ChessBoard {
+        let board = PieceListBoard {
             pieces: vec![
-                ChessPiece::new(square, PieceKind::Knight, PieceColour::Black),
-                ChessPiece::new(square, PieceKind::Bishop, PieceColour::White),
+                PieceWithPos::new(square, PieceKind::Knight, PieceColour::Black),
+                PieceWithPos::new(square, PieceKind::Bishop, PieceColour::White),
             ],
             turn: PieceColour::White,
             en_passant: None,
@@ -903,7 +906,7 @@ mod tests {
     #[test]
     fn none_on_square() {
         let square = SimpleSquare::new(3, 2);
-        let board = ChessBoard {
+        let board = PieceListBoard {
             pieces: vec![],
             turn: PieceColour::White,
             en_passant: None,
@@ -921,7 +924,7 @@ mod tests {
 
     #[test]
     fn white_pawn_double_push() {
-        let board = ChessBoard::starting_board();
+        let board = PieceListBoard::starting_board();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("e2").unwrap())
             .unwrap()
@@ -934,7 +937,7 @@ mod tests {
 
     #[test]
     fn black_pawn_double_push() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("h7").unwrap())
             .unwrap()
@@ -947,7 +950,7 @@ mod tests {
 
     #[test]
     fn pawn_double_push_blocked() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/2P5/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/2P5/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("c7").unwrap())
             .unwrap()
@@ -960,7 +963,7 @@ mod tests {
 
     #[test]
     fn pawn_takes() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("e4").unwrap())
             .unwrap()
@@ -973,7 +976,7 @@ mod tests {
 
     #[test]
     fn pawn_takes_en_passant_behind() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e3 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e3 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("e4").unwrap())
             .unwrap()
@@ -986,7 +989,7 @@ mod tests {
 
     #[test]
     fn en_passant() {
-        let mut board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let mut board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/5P2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
         board.move_piece(SimpleMove::from_pgn_str("g7g5").unwrap()).unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
@@ -1000,7 +1003,7 @@ mod tests {
 
     #[test]
     fn knight_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/ppppppp1/7p/8/6N1/8/PPPPPPPP/RNBQKB1R w KQkq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/ppppppp1/7p/8/6N1/8/PPPPPPPP/RNBQKB1R w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("g4").unwrap())
             .unwrap()
@@ -1013,7 +1016,7 @@ mod tests {
 
     #[test]
     fn bishop_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5b2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/5b2/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
             .unwrap()
@@ -1026,7 +1029,7 @@ mod tests {
 
     #[test]
     fn rook_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/2R2P2/8/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/2R2P2/8/8/PPPPP1PP/RNBQKBNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("c5").unwrap())
             .unwrap()
@@ -1039,7 +1042,7 @@ mod tests {
 
     #[test]
     fn queen_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppppppp/8/5Q2/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppppppp/8/5Q2/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("f5").unwrap())
             .unwrap()
@@ -1055,7 +1058,7 @@ mod tests {
 
     #[test]
     fn king_moves() {
-        let board = ChessBoard::from_fen("rnbqkbnr/pppp1ppp/4p3/4KP2/8/8/PPPP1PPP/RNBQ1BNR w kq - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("rnbqkbnr/pppp1ppp/4p3/4KP2/8/8/PPPP1PPP/RNBQ1BNR w kq - 0 2").unwrap();
         let mut moves: Vec<SimpleMove> = board
             .piece_plegal_moves(SimpleSquare::from_pgn_str("e5").unwrap())
             .unwrap()
@@ -1068,7 +1071,7 @@ mod tests {
 
     #[test]
     fn king_in_check() {
-        let board = ChessBoard::from_fen("k3r3/1P6/4K3/8/8/8/8/8 w - - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("k3r3/1P6/4K3/8/8/8/8/8 w - - 0 2").unwrap();
         assert!(board.king_in_check(PieceColour::White).unwrap());
         assert!(board.king_in_check(PieceColour::Black).unwrap());
         assert_eq!(board.state().unwrap(), BoardState::Check);
@@ -1076,7 +1079,7 @@ mod tests {
 
     #[test]
     fn king_not_in_check() {
-        let board = ChessBoard::from_fen("k3r3/8/1P6/3K4/8/8/8/8 w - - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("k3r3/8/1P6/3K4/8/8/8/8 w - - 0 2").unwrap();
         assert!(!board.king_in_check(PieceColour::White).unwrap());
         assert!(!board.king_in_check(PieceColour::Black).unwrap());
         assert_eq!(board.state().unwrap(), BoardState::Normal);
@@ -1084,7 +1087,7 @@ mod tests {
 
     #[test]
     fn pinned_piece() {
-        let board = ChessBoard::from_fen("k3r3/8/4N3/8/4K3/8/8/8 w - - 0 2").unwrap();
+        let board = PieceListBoard::from_fen("k3r3/8/4N3/8/4K3/8/8/8 w - - 0 2").unwrap();
         assert!(
             board
                 .piece_legal_moves(SimpleSquare::from_pgn_str("e6").unwrap())
@@ -1097,28 +1100,31 @@ mod tests {
 
     #[test]
     fn illegal_castle() {
-        let board = ChessBoard::from_fen("rn1qkbnr/ppp2ppp/3p4/1b2N3/4P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 1").unwrap();
+        let board = PieceListBoard::from_fen("rn1qkbnr/ppp2ppp/3p4/1b2N3/4P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 1").unwrap();
         assert!(!board.is_move_plegal(SimpleMove::from_pgn_str("e1g1").unwrap()).unwrap());
         assert!(!board.is_move_legal(SimpleMove::from_pgn_str("e1g1").unwrap()).unwrap());
     }
 
     #[test]
     fn legal_castle() {
-        let board = ChessBoard::from_fen("rn1qkbnr/pppb1ppp/3p4/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1").unwrap();
+        let board =
+            PieceListBoard::from_fen("rn1qkbnr/pppb1ppp/3p4/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1").unwrap();
         assert!(board.is_move_plegal(SimpleMove::from_pgn_str("e1g1").unwrap()).unwrap());
         assert!(board.is_move_legal(SimpleMove::from_pgn_str("e1g1").unwrap()).unwrap());
     }
 
     #[test]
     fn queenside_castle_no_knight() {
-        let board = ChessBoard::from_fen("r1bqk2r/ppp1bppp/2np1n2/4p3/4P3/2NPB3/PPP1QPPP/R3KBNR w KQkq - 0 1").unwrap();
+        let board =
+            PieceListBoard::from_fen("r1bqk2r/ppp1bppp/2np1n2/4p3/4P3/2NPB3/PPP1QPPP/R3KBNR w KQkq - 0 1").unwrap();
         assert!(board.is_move_plegal(SimpleMove::from_pgn_str("e1c1").unwrap()).unwrap());
         assert!(board.is_move_legal(SimpleMove::from_pgn_str("e1c1").unwrap()).unwrap());
     }
 
     #[test]
     fn castling_invalidation_king_move() {
-        let mut board = ChessBoard::from_fen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 1").unwrap();
+        let mut board =
+            PieceListBoard::from_fen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 1").unwrap();
         board.move_piece(SimpleMove::from_pgn_str("e1e2").unwrap()).unwrap();
         assert_eq!(board.castling_rights, [false, false, true, true]);
         board.move_piece(SimpleMove::from_pgn_str("e8e7").unwrap()).unwrap();
@@ -1127,7 +1133,8 @@ mod tests {
 
     #[test]
     fn castling_invalidation_queenside_rook_move() {
-        let mut board = ChessBoard::from_fen("r1bqkbnr/pppppppp/2n5/8/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 1").unwrap();
+        let mut board =
+            PieceListBoard::from_fen("r1bqkbnr/pppppppp/2n5/8/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 1").unwrap();
         board.move_piece(SimpleMove::from_pgn_str("a1b1").unwrap()).unwrap();
         assert_eq!(board.castling_rights, [true, false, true, true]);
         board.move_piece(SimpleMove::from_pgn_str("a8b8").unwrap()).unwrap();
@@ -1136,7 +1143,8 @@ mod tests {
 
     #[test]
     fn castling_invalidation_kingside_rook_move() {
-        let mut board = ChessBoard::from_fen("rnbqkb1r/pppppppp/5n2/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 1").unwrap();
+        let mut board =
+            PieceListBoard::from_fen("rnbqkb1r/pppppppp/5n2/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 1").unwrap();
         board.move_piece(SimpleMove::from_pgn_str("h1g1").unwrap()).unwrap();
         assert_eq!(board.castling_rights, [false, true, true, true]);
         board.move_piece(SimpleMove::from_pgn_str("h8g8").unwrap()).unwrap();
@@ -1145,7 +1153,7 @@ mod tests {
 
     #[test]
     fn fifty_move_draw() {
-        let mut board = ChessBoard::starting_board();
+        let mut board = PieceListBoard::starting_board();
         for _ in 0..12 {
             board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
             board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
@@ -1159,7 +1167,7 @@ mod tests {
 
     #[test]
     fn fifty_move_not_draw() {
-        let mut board = ChessBoard::starting_board();
+        let mut board = PieceListBoard::starting_board();
         for _ in 0..12 {
             board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
             board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();
@@ -1174,7 +1182,7 @@ mod tests {
 
     #[test]
     fn threefold_repetition() {
-        let mut board = ChessBoard::starting_board();
+        let mut board = PieceListBoard::starting_board();
         for _ in 0..3 {
             board.move_piece(SimpleMove::from_pgn_str("g1f3").unwrap()).unwrap();
             board.move_piece(SimpleMove::from_pgn_str("g8f6").unwrap()).unwrap();

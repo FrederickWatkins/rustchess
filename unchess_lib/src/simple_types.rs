@@ -94,7 +94,8 @@ pub struct SimpleMove {
     promote_to: Option<PieceKind>,
 }
 
-impl ChessMove<SimpleSquare> for SimpleMove {
+impl ChessMove for SimpleMove {
+    type Square = SimpleSquare;
     fn src(&self) -> SimpleSquare {
         self.src
     }

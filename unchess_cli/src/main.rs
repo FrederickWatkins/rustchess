@@ -3,7 +3,7 @@ use colored::*;
 use rustyline::{DefaultEditor, error::ReadlineError};
 
 use unchess_lib::{
-    board::piece_list::ChessBoard,
+    board::piece_list::PieceListBoard,
     error::ChessError,
     notation,
     simple_types::SimpleSquare,
@@ -17,14 +17,14 @@ fn main() {
 }
 
 struct Repl {
-    board: ChessBoard,
+    board: PieceListBoard,
     rl: DefaultEditor,
 }
 
 impl Repl {
     pub fn new() -> Self {
         Self {
-            board: ChessBoard::starting_board(),
+            board: PieceListBoard::starting_board(),
             rl: DefaultEditor::new().expect("Failed to initialize repl"),
         }
     }
@@ -76,23 +76,26 @@ impl Repl {
 
     pub fn new_board(&mut self, fen: Option<&String>) -> Result<(), ChessError> {
         if let Some(fen) = fen {
-            self.board = ChessBoard::from_fen(fen)?;
+            self.board = PieceListBoard::from_fen(fen)?;
         } else {
-            self.board = ChessBoard::starting_board();
+            self.board = PieceListBoard::starting_board();
         }
         self.show_board();
         Ok(())
     }
 
     pub fn move_piece(&mut self, chess_move: &str) -> Result<(), ChessError> {
-        self.board.move_piece(self.board.disambiguate_move(chess_move)?)?;
+        self.board.move_piece(self.board.disambiguate_move_pgn(chess_move)?)?;
         self.show_board();
         self.board_state()?;
         Ok(())
     }
 
     pub fn check_move(&self, chess_move: &str) -> Result<(), ChessError> {
-        if self.board.is_move_legal(self.board.disambiguate_move(chess_move)?)? {
+        if self
+            .board
+            .is_move_legal(self.board.disambiguate_move_pgn(chess_move)?)?
+        {
             println!("Move {} legal", chess_move);
         } else {
             println!("Illegal move {chess_move}");
